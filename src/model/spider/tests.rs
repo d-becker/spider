@@ -5,18 +5,8 @@ fn get_spider() -> Spider {
     Spider::new(null_point, Direction::NONE)
 }
 
-fn get_spider_on_line() -> Spider {
-    let mut path = rectilinear::Path::with_start(Point::new(0, 0));
-    path.add(Point::new(1, 0)).unwrap();
-
-    Spider {
-        dir: Direction::RIGHT,
-        path: path,
-    }
-}
-
 #[test]
-fn spider_get_pos() {
+fn spider_set_get_dir() {
     let mut spider = get_spider();
 
     spider.set_dir(Direction::UP);
@@ -27,20 +17,22 @@ fn spider_get_pos() {
 }
 
 #[test]
-fn spider_update_no_motion() {
-    let mut spider = get_spider();
-    spider.set_dir(Direction::NONE);
+fn spider_update_right() {
+    for dir in &[
+        Direction::UP,
+        Direction::DOWN,
+        Direction::LEFT,
+        Direction::RIGHT,
+        Direction::NONE,
+    ] {
+        let mut spider = get_spider();
+        let old_pos = spider.pos();
 
-    let old_pos = spider.get_pos();
-    let old_points = spider.get_points().to_vec();
+        spider.set_dir(*dir);
+        spider.update();
 
-    spider.update();
-
-    let new_pos = spider.get_pos();
-    let new_points = spider.get_points();
-
-    assert_eq!(old_pos, new_pos);
-    assert_eq!(old_points, new_points);
+        let expected = old_pos.add(dir.to_point());
+        let new_pos = spider.pos();
+        assert_eq!(expected, new_pos);
+    }
 }
-
-// TODO: Test correct new position depending on direction.

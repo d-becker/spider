@@ -1,25 +1,30 @@
-use super::point::{Direction, Point};
+use super::point::Point;
+use super::rectilinear;
 
 #[derive(Debug)]
 pub struct Field {
     width_: i32,
     height_: i32,
-    free_polygon_: Vec<Point>,
+    free_polygon_: rectilinear::Polygon,
 }
 
 impl Field {
     pub fn new(width: i32, height: i32) -> Field {
-        let points = vec![
+        let points = [
             Point::new(0, 0),
             Point::new(width, 0),
             Point::new(width, height),
             Point::new(0, height),
         ];
+        let path = rectilinear::Path::with_points(&points)
+            .expect("Should never happen, the points are vertices of a square.");
+        let poly = rectilinear::Polygon::with_path(path)
+            .expect("Should never happen, the points are vertices of a square.");
 
         Field {
             width_: width,
             height_: height,
-            free_polygon_: points,
+            free_polygon_: poly,
         }
     }
 
@@ -31,25 +36,13 @@ impl Field {
         self.height_
     }
 
-    pub fn free_polygon(&self) -> &[Point] {
+    pub fn free_polygon(&self) -> &rectilinear::Polygon {
         &self.free_polygon_
     }
 
     pub fn free_area(&self) -> i32 {
-        let total = self.width_ * self.height_;
-        let free = shoelace_poly_area(&self.free_polygon_);
-        total - free
+        self.free_polygon_.area()
     }
-}
-
-fn shoelace_poly_area(vertices: &[Point]) -> i32 {
-    let x_s = || vertices.iter().map(|point| point.x);
-    let y_s = || vertices.iter().map(|point| point.y);
-
-    let positives: i32 = x_s().zip(y_s().cycle().skip(1)).map(|(x, y)| x * y).sum();
-    let negatives: i32 = y_s().zip(x_s().cycle().skip(1)).map(|(x, y)| x * y).sum();
-
-    (positives - negatives).abs() / 2
 }
 
 #[cfg(test)]

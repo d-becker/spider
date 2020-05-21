@@ -2,7 +2,7 @@ use gio::prelude::*;
 use glib::clone;
 use gtk::prelude::*;
 
-mod model;
+use spider_core;
 
 // When the application is launched…
 fn on_activate(application: &gtk::Application) {
