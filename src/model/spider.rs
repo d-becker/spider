@@ -15,7 +15,7 @@ impl Spider {
         }
     }
 
-    pub fn pos(&self) -> Point {
+    pub fn pos(&self) -> &Point {
         self.path_.last().unwrap()
     }
 

@@ -51,13 +51,28 @@ fn line_from_points_none() {
 }
 
 #[test]
+fn line_directions() {
+    let p0 = Point::new(0, 0);
+
+    let line_left = Line::from_points(p0, Point::new(-10, 0)).unwrap();
+    let line_right = Line::from_points(p0, Point::new(5, 0)).unwrap();
+    let line_up = Line::from_points(p0, Point::new(0, -9)).unwrap();
+    let line_down = Line::from_points(p0, Point::new(0, 3)).unwrap();
+
+    assert_eq!(Direction::LEFT, line_left.direction());
+    assert_eq!(Direction::RIGHT, line_right.direction());
+    assert_eq!(Direction::UP, line_up.direction());
+    assert_eq!(Direction::DOWN, line_down.direction());
+}
+
+#[test]
 fn collinear_vertical() {
     let p1 = Point::new(1, 2);
     let p2 = Point::new(1, 3);
     let line = Line::from_points(p1, p2).unwrap();
     let p3 = Point::new(1, 4);
 
-    assert!(collinear(&line, p3));
+    assert!(line.collinear(p3));
 }
 
 #[test]
@@ -68,7 +83,7 @@ fn collinear_horizontal() {
 
     let p3 = Point::new(4, 1);
 
-    assert!(collinear(&line, p3));
+    assert!(line.collinear(p3));
 }
 
 #[test]
@@ -79,7 +94,7 @@ fn collinear_false() {
 
     let p3 = Point::new(2, 4);
 
-    assert!(!collinear(&line, p3));
+    assert!(!line.collinear(p3));
 }
 
 #[test]
@@ -90,7 +105,7 @@ fn line_contains_inside() {
 
     let p = Point::new(3, 1);
 
-    assert!(line_contains(&line, p));
+    assert!(line.contains(p));
 }
 
 #[test]
@@ -101,7 +116,7 @@ fn line_contains_on_edge() {
 
     let p = end;
 
-    assert!(line_contains(&line, p));
+    assert!(line.contains(p));
 }
 
 #[test]
@@ -112,7 +127,7 @@ fn line_contains_inside_vertical_reversed() {
 
     let p = Point::new(1, 3);
 
-    assert!(line_contains(&line, p));
+    assert!(line.contains(p));
 }
 
 #[test]
@@ -123,7 +138,7 @@ fn line_contains_inside_horizontal_reversed() {
 
     let p = Point::new(3, 1);
 
-    assert!(line_contains(&line, p));
+    assert!(line.contains(p));
 }
 
 fn check_lines_intersect(l1: (&Point, &Point), l2: (&Point, &Point), expected_eq: bool) {
@@ -134,16 +149,20 @@ fn check_lines_intersect(l1: (&Point, &Point), l2: (&Point, &Point), expected_eq
     let line2_rev = Line::from_points(l2.1, l2.0).unwrap();
 
     // 1.
-    assert_eq!(expected_eq, lines_intersect(&line1, &line2));
+    assert_eq!(expected_eq, line1.intersects(&line2));
+    assert_eq!(expected_eq, line2.intersects(&line1));
 
     // 2.
-    assert_eq!(expected_eq, lines_intersect(&line1_rev, &line2));
+    assert_eq!(expected_eq, line1_rev.intersects(&line2));
+    assert_eq!(expected_eq, line2.intersects(&line1_rev));
 
     // 3.
-    assert_eq!(expected_eq, lines_intersect(&line1, &line2_rev));
+    assert_eq!(expected_eq, line1.intersects(&line2_rev));
+    assert_eq!(expected_eq, line2_rev.intersects(&line1));
 
     // 4.
-    assert_eq!(expected_eq, lines_intersect(&line1_rev, &line2_rev));
+    assert_eq!(expected_eq, line1_rev.intersects(&line2_rev));
+    assert_eq!(expected_eq, line2_rev.intersects(&line1_rev));
 }
 
 #[test]
@@ -192,6 +211,33 @@ fn lines_intersect_parallel_disjoint() {
     let line2 = (&Point::new(3, 0), &Point::new(4, 0));
 
     check_lines_intersect(line1, line2, false);
+}
+
+#[test]
+fn half_line_intersects_line_true() {
+    let point = Point::new(0, 0);
+    let dir = Direction::LEFT;
+
+    let line = Line::from_points(Point::new(-1, -1), Point::new(-1, 1)).unwrap();
+    assert!(line.intersects_half_line(&point, dir));
+}
+
+#[test]
+fn half_line_intersects_line_false_wrong_direction() {
+    let point = Point::new(0, 0);
+    let dir = Direction::RIGHT;
+
+    let line = Line::from_points(Point::new(-1, -1), Point::new(-1, 1)).unwrap();
+    assert!(!line.intersects_half_line(&point, dir));
+}
+
+#[test]
+fn half_line_intersects_line_false_above_half_line() {
+    let point = Point::new(0, 0);
+    let dir = Direction::LEFT;
+
+    let line = Line::from_points(Point::new(-1, -2), Point::new(-1, -1)).unwrap();
+    assert!(!line.intersects_half_line(&point, dir));
 }
 
 #[test]
@@ -621,6 +667,79 @@ fn polygon_iterator_rev() {
     }
 }
 
+#[test]
+fn polygon_line_iterator() {
+    let points = vec![
+        Point::new(0, 0),
+        Point::new(20, 0),
+        Point::new(20, 10),
+        Point::new(10, 10),
+        Point::new(10, 20),
+        Point::new(0, 20),
+    ];
+    let poly_path = Path::with_points(&points).unwrap();
+    let poly = Polygon::with_path(poly_path.clone()).unwrap();
+
+    let expected: Vec<_> = {
+        let rotated = points
+            .iter()
+            .chain(iter::once(points.first().unwrap()))
+            .skip(1);
+        points.iter().zip(rotated).map(|(p1, p2)| Line::from_points(p1, p2).unwrap()).collect()
+    };
+
+    let res: Vec<_> = poly.line_iter().collect();
+
+    assert_eq!(expected, res);
+}
+
+#[test]
+fn polygon_inside() {
+    let points = vec![
+        Point::new(0, 0),
+        Point::new(20, 0),
+        Point::new(20, 10),
+        Point::new(10, 10),
+        Point::new(10, 20),
+        Point::new(20, 20),
+        Point::new(20, 30),
+        Point::new(0, 30),
+    ];
+    let poly_path = Path::with_points(&points).unwrap();
+    let poly = Polygon::with_path(poly_path.clone()).unwrap();
+
+    let inside_points = vec![
+        Point::new(1, 1),
+        Point::new(5, 10),
+        Point::new(5, 15),
+        Point::new(6, 25),
+        Point::new(15, 5),
+        Point::new(15, 25),
+    ];
+
+    let outside_points = vec![
+        Point::new(-1, -1),
+        Point::new(15, -5),
+        Point::new(-5, 15),
+        Point::new(5, 35),
+        Point::new(25, 5),
+        Point::new(25, 25),
+        Point::new(15, 15),
+    ];
+
+    for point in &inside_points {
+        assert!(poly.is_inside(point), "Should be inside: {:?}.", point);
+    }
+
+    for point in &outside_points {
+        assert!(!poly.is_inside(point), "Should be outside: {:?}.", point);
+    }
+
+    for point in &points {
+        assert!(!poly.is_inside(point), "Should be outside: {:?}.", point);
+    }
+}
+
 fn polygon_test_cut_path_both_directions(
     orig_points: &[Point],
     expected1_points: &[Point],
@@ -790,9 +909,111 @@ fn polygon_cut_same_insertion_point() {
     polygon_test_cut_path_both_directions(&orig_points, &points1, &points2, &cutting_path);
 }
 
-// TODO: Test
-//  - insertion point of both ends of path are the same
-//      - the other parts are outside?
-//      - both outside and inside?
-//  - cut path start AND end is at a vertex
-//  - three or more `insertion points'
+#[test]
+fn polygon_cut_path_does_not_start_or_end_on_edge() {
+    let points = [
+        Point::new(0, 0),
+        Point::new(10, 0),
+        Point::new(10, 10),
+        Point::new(0, 10),
+    ];
+    let poly_path = Path::with_points(&points).unwrap();
+    let poly = Polygon::with_path(poly_path).unwrap();
+
+    let cutting_path1 = Path::with_points(&[
+        Point::new(1, 1),
+        Point::new(9, 1),
+    ]).unwrap();
+
+    assert_eq!(None, poly.cut(&cutting_path1));
+
+    let cutting_path2 = Path::with_points(&[
+        Point::new(1, 0),
+        Point::new(1, 1),
+        Point::new(9, 1),
+    ]).unwrap();
+
+    assert_eq!(None, poly.cut(&cutting_path2));
+
+    let cutting_path3 = Path::with_points(&[
+        Point::new(1, 1),
+        Point::new(9, 1),
+        Point::new(9, 0),
+    ]).unwrap();
+
+    assert_eq!(None, poly.cut(&cutting_path3));
+}
+
+#[test]
+fn polygon_cut_path_outside() {
+    let points = [
+        Point::new(0, 0),
+        Point::new(10, 0),
+        Point::new(10, 10),
+        Point::new(0, 10),
+    ];
+    let poly_path = Path::with_points(&points).unwrap();
+    let poly = Polygon::with_path(poly_path).unwrap();
+
+    let cutting_path = Path::with_points(&[
+        Point::new(1, 0),
+        Point::new(1, -1),
+        Point::new(9, -1),
+        Point::new(9, 0),
+    ])
+    .unwrap();
+
+    assert_eq!(None, poly.cut(&cutting_path));
+}
+
+#[test]
+fn polygon_cut_path_partly_outside() {
+    let points = [
+        Point::new(0, 0),
+        Point::new(10, 0),
+        Point::new(10, 10),
+        Point::new(0, 10),
+    ];
+    let poly_path = Path::with_points(&points).unwrap();
+    let poly = Polygon::with_path(poly_path).unwrap();
+
+    let cutting_path = Path::with_points(&[
+        Point::new(1, 0),
+        Point::new(1, -1),
+        Point::new(2, -1),
+        Point::new(2, 1),
+        Point::new(4, 1),
+        Point::new(4, -1),
+        Point::new(9, -1),
+        Point::new(9, 0),
+    ])
+    .unwrap();
+
+    assert_eq!(None, poly.cut(&cutting_path));
+}
+
+#[test]
+fn polygon_cut_path_multiple_edge_touches() {
+    let points = [
+        Point::new(0, 0),
+        Point::new(10, 0),
+        Point::new(10, 10),
+        Point::new(0, 10),
+    ];
+    let poly_path = Path::with_points(&points).unwrap();
+    let poly = Polygon::with_path(poly_path).unwrap();
+
+    let cutting_path = Path::with_points(&[
+        Point::new(1, 0),
+        Point::new(1, 1),
+        Point::new(2, 1),
+        Point::new(2, 0),
+        Point::new(4, 0),
+        Point::new(4, 1),
+        Point::new(9, 1),
+        Point::new(9, 0),
+    ])
+    .unwrap();
+
+    assert_eq!(None, poly.cut(&cutting_path));
+}

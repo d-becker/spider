@@ -26,13 +26,13 @@ fn spider_update_right() {
         Direction::NONE,
     ] {
         let mut spider = get_spider();
-        let old_pos = spider.pos();
+        let old_pos = *spider.pos();
 
         spider.set_dir(*dir);
         spider.update();
 
         let expected = old_pos.add(dir.to_point());
         let new_pos = spider.pos();
-        assert_eq!(expected, new_pos);
+        assert_eq!(&expected, new_pos);
     }
 }

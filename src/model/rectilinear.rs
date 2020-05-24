@@ -1,4 +1,5 @@
 use std::borrow::Borrow;
+use std::iter;
 
 use super::point::{Direction, Point};
 
@@ -21,6 +22,7 @@ where
     horizontal(p1, p2) || vertical(p1, p2)
 }
 
+#[derive(Debug, Eq, PartialEq)]
 pub struct Line<PointT>
 where
     PointT: Borrow<Point>,
@@ -45,76 +47,100 @@ impl<PointT: Borrow<Point>> Line<PointT> {
     pub fn end(&self) -> &PointT {
         &self.end
     }
-}
 
-pub fn collinear<PointT1, PointT2>(line: &Line<PointT1>, p3: PointT2) -> bool
-where
-    PointT1: Borrow<Point>,
-    PointT2: Borrow<Point>,
-{
-    let p1 = line.start().borrow();
-    let p2 = line.start().borrow();
-    let p3 = p3.borrow();
-
-    vertical_collinear(p1, p2, p3) || horizontal_collinear(p1, p2, p3)
-}
-
-pub fn line_contains<PointT1, PointT2>(line: &Line<PointT1>, p: PointT2) -> bool
-where
-    PointT1: Borrow<Point>,
-    PointT2: Borrow<Point>,
-{
-    let start = line.start().borrow();
-    let end = line.end().borrow();
-    let p = p.borrow();
-
-    if vertical_collinear(start, end, p) {
-        (start.y <= p.y && p.y <= end.y) || (end.y <= p.y && p.y <= start.y)
-    } else if horizontal_collinear(start, end, p) {
-        (start.x <= p.x && p.x <= end.x) || (end.x <= p.x && p.x <= start.x)
-    } else {
-        false
+    pub fn vertical(&self) -> bool {
+        self.start.borrow().x == self.end.borrow().x
     }
-}
 
-pub fn lines_intersect<PointT1, PointT2>(line1: &Line<PointT1>, line2: &Line<PointT2>) -> bool
-where
-    PointT1: Borrow<Point>,
-    PointT2: Borrow<Point>,
-{
-    let l1_h = [line1.start().borrow().x, line1.end().borrow().x];
-    let l2_h = [line2.start().borrow().x, line2.end().borrow().x];
+    pub fn horizontal(&self) -> bool {
+        self.start.borrow().y == self.end.borrow().y
+    }
 
-    let l1_v = [line1.start().borrow().y, line1.end().borrow().y];
-    let l2_v = [line2.start().borrow().y, line2.end().borrow().y];
+    pub fn direction(&self) -> Direction {
+        let diff = self.end.borrow().subtract(self.start.borrow());
 
-    intervals_overlap(l1_h, l2_h) && intervals_overlap(l1_v, l2_v)
-}
+        if diff.x == 0 {
+            if diff.y > 0 {
+                Direction::DOWN
+            } else if diff.y < 0 {
+                Direction::UP
+            } else {
+                Direction::NONE
+            }
+        } else {
+            debug_assert!(diff.y == 0);
+            if diff.x > 0 {
+                Direction::RIGHT
+            } else {
+                debug_assert!(diff.x < 0);
+                Direction::LEFT
+            }
+        }
+    }
 
-// TODO: Test.
-pub fn half_line_intersects_line<PointT>(
-    half_line_point: &Point,
-    half_line_dir: Direction,
-    line: &Line<PointT>,
-) -> bool
-where
-    PointT: Borrow<Point>,
-{
-    // TODO: Better solution?
-    let half_line_end = {
-        let mut pt = *half_line_point;
-        match half_line_dir {
-            Direction::UP => pt.y = i32::MIN,
-            Direction::DOWN => pt.y = i32::MAX,
-            Direction::LEFT => pt.x = i32::MIN,
-            Direction::RIGHT => pt.x = i32::MAX,
-            Direction::NONE => {}
+    pub fn collinear<PointT2>(&self, p: PointT2) -> bool
+    where
+        PointT2: Borrow<Point>,
+    {
+        let p1 = self.start().borrow();
+        let p2 = self.start().borrow();
+        let p3 = p.borrow();
+
+        vertical_collinear(p1, p2, p3) || horizontal_collinear(p1, p2, p3)
+    }
+
+    pub fn contains<PointT2>(&self, p: PointT2) -> bool
+    where
+        PointT2: Borrow<Point>,
+    {
+        let start = self.start().borrow();
+        let end = self.end().borrow();
+        let p = p.borrow();
+
+        if vertical_collinear(start, end, p) {
+            (start.y <= p.y && p.y <= end.y) || (end.y <= p.y && p.y <= start.y)
+        } else if horizontal_collinear(start, end, p) {
+            (start.x <= p.x && p.x <= end.x) || (end.x <= p.x && p.x <= start.x)
+        } else {
+            false
+        }
+    }
+
+    pub fn intersects<PointT2>(&self, other: &Line<PointT2>) -> bool
+    where
+        PointT2: Borrow<Point>,
+    {
+        let l1_h = [self.start().borrow().x, self.end().borrow().x];
+        let l2_h = [other.start().borrow().x, other.end().borrow().x];
+
+        let l1_v = [self.start().borrow().y, self.end().borrow().y];
+        let l2_v = [other.start().borrow().y, other.end().borrow().y];
+
+        intervals_overlap(l1_h, l2_h) && intervals_overlap(l1_v, l2_v)
+    }
+
+    pub fn intersects_half_line(
+        &self,
+        half_line_point: &Point,
+        half_line_dir: Direction,
+    ) -> bool
+    {
+        // TODO: Better solution?
+        let half_line_end = {
+            let mut pt = *half_line_point;
+            match half_line_dir {
+                Direction::UP => pt.y = i32::MIN,
+                Direction::DOWN => pt.y = i32::MAX,
+                Direction::LEFT => pt.x = i32::MIN,
+                Direction::RIGHT => pt.x = i32::MAX,
+                Direction::NONE => {}
+            };
+            pt
         };
-        pt
-    };
 
-    let half_line = Line::from_points(half_line_point, &half_line_end).unwrap();
-    lines_intersect(&half_line, line)
+        let half_line = Line::from_points(half_line_point, &half_line_end).unwrap();
+        self.intersects(&half_line)
+    }
 }
 
 fn intervals_overlap(mut int1: [i32; 2], mut int2: [i32; 2]) -> bool {
@@ -194,12 +220,12 @@ impl Path {
         Some(path)
     }
 
-    pub fn first(&self) -> Option<Point> {
-        self.points_.first().map(|&point| point)
+    pub fn first(&self) -> Option<&Point> {
+        self.points_.first()
     }
 
-    pub fn last(&self) -> Option<Point> {
-        self.points_.last().map(|&point| point)
+    pub fn last(&self) -> Option<&Point> {
+        self.points_.last()
     }
 
     pub fn points(&self) -> &[Point] {
@@ -239,7 +265,7 @@ impl Path {
 
     pub fn insertion_point(&self, point: &Point) -> Option<usize> {
         for (i, line) in self.line_iter().enumerate() {
-            if line_contains(&line, point) {
+            if line.contains(point) {
                 return Some(i + 1);
             }
         }
@@ -258,16 +284,11 @@ impl Path {
     }
 
     fn handle_collinearity(&mut self, new_pos: &Point) {
-        let mut should_delete = false;
         // Is .last() inefficient.
         if let Some(line) = self.line_iter().last() {
-            if collinear(&line, new_pos) {
-                should_delete = true;
+            if line.collinear(new_pos) {
+                self.points_.pop();
             }
-        }
-
-        if should_delete {
-            self.points_.pop();
         }
     }
 }
@@ -326,6 +347,13 @@ impl Polygon {
         self.vertex_iter_from_ind(start_idx + 1).rev()
     }
 
+    pub fn line_iter(&self) -> impl Iterator<Item = Line<&Point>> {
+        let last = self.path().last().unwrap();
+        let first = self.path().first().unwrap();
+        let last_line = Line::<&Point>::from_points(last, first).unwrap();
+        self.path().line_iter().chain(iter::once(last_line))
+    }
+
     pub fn area(&self) -> i32 {
         let vertices = self.path_.points();
         let x_s = || vertices.iter().map(|point| point.x);
@@ -347,7 +375,7 @@ impl Polygon {
         if let &[first, .., last] = self.path_.points() {
             // TODO: Use line segment iterator?
             let line = Line::from_points(last, first).unwrap();
-            if line_contains(&line, point) {
+            if line.contains(point) {
                 return Some(0);
             }
         } else {
@@ -358,11 +386,30 @@ impl Polygon {
         None
     }
 
-    pub fn contains(&self, point: &Point) -> bool {
+    pub fn is_on_edge(&self, point: &Point) -> bool {
         self.insertion_point(point).is_some()
     }
 
+    pub fn is_inside(&self, point: &Point) -> bool {
+        let mut count = 0;
+        for line in self.line_iter() {
+            if line.contains(point) {
+                return false;
+            }
+
+            if line.intersects_half_line(point, Direction::RIGHT) {
+                count += 1;
+            }
+        }
+
+        count % 2 == 1
+    }
+
     pub fn cut(&self, path: &Path) -> Option<(Polygon, Polygon)> {
+        if !self.check_path_inside(path) {
+            return None;
+        }
+
         let (insertion_start, insertion_end, path_points): (usize, usize, Vec<Point>) =
             self.cut_path_insertion_and_direction(path)?;
 
@@ -439,8 +486,8 @@ impl Polygon {
     ) -> bool {
         // TODO: Line as an argument?
         let line = Line::from_points(vertex_start, vertex_end).unwrap();
-        debug_assert!(collinear(&line, cut_start));
-        debug_assert!(collinear(&line, cut_end));
+        debug_assert!(line.collinear(cut_start));
+        debug_assert!(line.collinear(cut_end));
 
         if vertex_start.x == vertex_end.x {
             (vertex_start.y - cut_start.y).abs() > (vertex_start.y - cut_end.y).abs()
@@ -448,6 +495,12 @@ impl Polygon {
             debug_assert!(vertex_start.y == vertex_end.y);
             (vertex_start.x - cut_start.x).abs() > (vertex_start.x - cut_end.x).abs()
         }
+    }
+
+    fn check_path_inside(&self, path: &Path) -> bool {
+        let points = path.points();
+        let non_end_points = &points[1..points.len() - 1];
+        non_end_points.iter().all(|p| self.is_inside(p))
     }
 }
 
