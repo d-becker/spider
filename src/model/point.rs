@@ -22,7 +22,6 @@ impl Point {
         Point::new(x, y)
     }
 
-    // TODO: Test.
     pub fn subtract<T: Borrow<Point>>(&self, other: T) -> Point {
         let borrowed = other.borrow();
         let x = self.x - borrowed.x;

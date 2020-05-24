@@ -31,6 +31,12 @@ where
     end: PointT,
 }
 
+#[derive(Debug, Eq, PartialEq)]
+pub enum LineIntersection {
+    Line(Line<Point>),
+    Point(Point),
+}
+
 impl<PointT: Borrow<Point>> Line<PointT> {
     pub fn from_points(start: PointT, end: PointT) -> Option<Line<PointT>> {
         if rectilinear(start.borrow(), end.borrow()) {
@@ -110,16 +116,56 @@ impl<PointT: Borrow<Point>> Line<PointT> {
     where
         PointT2: Borrow<Point>,
     {
+        self.intersection(other).is_some()
+    }
+
+    pub fn intersection<PointT2>(&self, other: &Line<PointT2>) -> Option<LineIntersection>
+    where
+        PointT2: Borrow<Point>,
+    {
         let l1_h = [self.start().borrow().x, self.end().borrow().x];
         let l2_h = [other.start().borrow().x, other.end().borrow().x];
 
         let l1_v = [self.start().borrow().y, self.end().borrow().y];
         let l2_v = [other.start().borrow().y, other.end().borrow().y];
 
-        intervals_overlap(l1_h, l2_h) && intervals_overlap(l1_v, l2_v)
+        let horiz_overlap = intervals_overlap(l1_h, l2_h)?;
+        let vertical_overlap = intervals_overlap(l1_v, l2_v)?;
+
+        let horiz_is_point = horiz_overlap.0 == horiz_overlap.1;
+        let vert_is_point = vertical_overlap.0 == vertical_overlap.1;
+
+        if horiz_is_point && vert_is_point {
+            Some(LineIntersection::Point(Point::new(
+                horiz_overlap.0,
+                vertical_overlap.0,
+            )))
+        } else if horiz_is_point {
+            debug_assert!(!vert_is_point);
+            let x = horiz_overlap.0;
+            let p1 = Point::new(x, vertical_overlap.0);
+            let p2 = Point::new(x, vertical_overlap.1);
+            Some(LineIntersection::Line(Line::from_points(p1, p2).unwrap()))
+        } else {
+            // The intersection of lines cannot be 2 dimensional.
+            debug_assert!(vert_is_point);
+            let y = vertical_overlap.0;
+            let p1 = Point::new(horiz_overlap.0, y);
+            let p2 = Point::new(horiz_overlap.1, y);
+            Some(LineIntersection::Line(Line::from_points(p1, p2).unwrap()))
+        }
     }
 
     pub fn intersects_half_line(&self, half_line_point: &Point, half_line_dir: Direction) -> bool {
+        self.intersection_with_half_line(half_line_point, half_line_dir)
+            .is_some()
+    }
+
+    pub fn intersection_with_half_line(
+        &self,
+        half_line_point: &Point,
+        half_line_dir: Direction,
+    ) -> Option<LineIntersection> {
         // TODO: Better solution?
         let half_line_end = {
             let mut pt = *half_line_point;
@@ -134,15 +180,22 @@ impl<PointT: Borrow<Point>> Line<PointT> {
         };
 
         let half_line = Line::from_points(half_line_point, &half_line_end).unwrap();
-        self.intersects(&half_line)
+        self.intersection(&half_line)
     }
 }
 
-fn intervals_overlap(mut int1: [i32; 2], mut int2: [i32; 2]) -> bool {
+fn intervals_overlap(mut int1: [i32; 2], mut int2: [i32; 2]) -> Option<(i32, i32)> {
     int1.sort();
     int2.sort();
 
-    (int1[0] <= int2[0] && int2[0] <= int1[1]) || (int1[0] <= int2[1] && int2[0] <= int1[1])
+    let larger_start = i32::max(int1[0], int2[0]);
+    let smaller_end = i32::min(int1[1], int2[1]);
+
+    if larger_start <= smaller_end {
+        Some((larger_start, smaller_end))
+    } else {
+        None
+    }
 }
 
 fn vertical_collinear(p1: &Point, p2: &Point, p3: &Point) -> bool {
@@ -151,40 +204,6 @@ fn vertical_collinear(p1: &Point, p2: &Point, p3: &Point) -> bool {
 
 fn horizontal_collinear(p1: &Point, p2: &Point, p3: &Point) -> bool {
     p1.y == p2.y && p2.y == p3.y
-}
-
-fn get_range(
-    start: i32,
-    start_incl: bool,
-    end: i32,
-    end_incl: bool,
-) -> Box<dyn Iterator<Item = i32>> {
-    if start <= end {
-        Box::new(start + !start_incl as i32..=end - !end_incl as i32)
-    } else {
-        Box::new((end + !end_incl as i32..=start - !start_incl as i32).rev())
-    }
-}
-
-fn generate_rectilinear_path(
-    p1: &Point,
-    p1_incl: bool,
-    p2: &Point,
-    p2_incl: bool,
-) -> Option<Box<dyn Iterator<Item = Point>>> {
-    if p1.x == p2.x {
-        let common_x = p1.x;
-        Some(Box::new(
-            get_range(p1.y, p1_incl, p2.y, p2_incl).map(move |y| Point::new(common_x, y)),
-        ))
-    } else if p1.y == p2.y {
-        let common_y = p1.y;
-        Some(Box::new(
-            get_range(p1.x, p1_incl, p2.x, p2_incl).map(move |x| Point::new(x, common_y)),
-        ))
-    } else {
-        None
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -205,11 +224,15 @@ impl Path {
         }
     }
 
-    pub fn with_points(points: &[Point]) -> Option<Path> {
+    pub fn with_points<PointT, Iter>(points: Iter) -> Option<Path>
+    where
+        PointT: Borrow<Point>,
+        Iter: Iterator<Item = PointT>,
+    {
         let mut path = Path::new();
 
         for point in points {
-            path.add(*point).ok()?;
+            path.add(*point.borrow()).ok()?;
         }
 
         Some(path)
@@ -240,17 +263,39 @@ impl Path {
                 return Ok(());
             }
 
-            // TODO: Now we generate every point between the last and the new point to handle path
-            // intersections. We could use a more efficient approach.
-            if let Some(it) = generate_rectilinear_path(last_point, false, &point, true) {
-                for intermediary_point in it {
-                    self.handle_loop(&intermediary_point);
-                    self.handle_collinearity(&intermediary_point);
+            let new_line = Line::from_points(last_point, &point).ok_or("Not rectilinear.")?;
 
-                    self.points_.push(intermediary_point);
+            let mut points_to_add = vec![point];
+
+            // We do not need the last line segment, that is always connected at the end and if
+            // there are further connections, it is handled in 'handle_loop'.
+            let num_of_lines = self.points().len() - 1;
+            for line in self.line_iter().take(num_of_lines.saturating_sub(1))  {
+                let intersection = line.intersection(&new_line);
+                if let Some(int) = intersection {
+                    match int {
+                        LineIntersection::Point(point) => {
+                            if point != points_to_add[0] {
+                                points_to_add.push(point);
+                            }
+                        }
+                        LineIntersection::Line(line) => {
+                            let pt = line.start; // Does it matter which end?
+                            if pt != points_to_add[0] {
+                                points_to_add.push(pt);
+                            }
+                        }
+                    }
+
+                    break;
                 }
-            } else {
-                return Result::Err("Not rectilinear.");
+            }
+
+            for pt in points_to_add.iter().rev() {
+                self.handle_loop(&pt);
+                self.handle_collinearity(&pt);
+
+                self.points_.push(*pt);
             }
         } else {
             self.points_.push(point);
@@ -410,22 +455,20 @@ impl Polygon {
 
         let orig_points = self.path().points();
 
-        let points1: Vec<Point> = orig_points[..insertion_start]
+        let points1 = orig_points[..insertion_start]
             .iter()
             .chain(&path_points)
             .chain(&orig_points[insertion_end..])
-            .map(|&p| p)
-            .collect();
-        let path1 = Path::with_points(&points1).unwrap();
+            .map(|&p| p);
+        let path1 = Path::with_points(points1).unwrap();
         let poly1 = Polygon::with_path(path1).unwrap();
 
-        let points2: Vec<Point> = path_points
+        let points2 = path_points
             .iter()
             .rev()
             .chain(&orig_points[insertion_start..insertion_end])
-            .map(|&p| p)
-            .collect();
-        let path2 = Path::with_points(&points2).unwrap();
+            .map(|&p| p);
+        let path2 = Path::with_points(points2).unwrap();
         let poly2 = Polygon::with_path(path2).unwrap();
 
         Some((poly1, poly2))

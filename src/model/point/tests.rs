@@ -12,6 +12,17 @@ fn add_points() {
 }
 
 #[test]
+fn subtract_points() {
+    let a = Point::new(1, -4);
+    let b = Point::new(10, -5);
+
+    let exp = Point::new(-9, 1);
+    let res = a.subtract(b);
+
+    assert_eq!(exp, res);
+}
+
+#[test]
 fn dir_to_point() {
     let directions = vec![
         Direction::UP,

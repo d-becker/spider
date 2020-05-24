@@ -16,7 +16,7 @@ impl Field {
             Point::new(width, height),
             Point::new(0, height),
         ];
-        let path = rectilinear::Path::with_points(&points)
+        let path = rectilinear::Path::with_points(points.iter())
             .expect("Should never happen, the points are vertices of a square.");
         let poly = rectilinear::Polygon::with_path(path)
             .expect("Should never happen, the points are vertices of a square.");

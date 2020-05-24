@@ -141,7 +141,11 @@ fn line_contains_inside_horizontal_reversed() {
     assert!(line.contains(p));
 }
 
-fn check_lines_intersect(l1: (&Point, &Point), l2: (&Point, &Point), expected_eq: bool) {
+fn check_lines_intersect(
+    l1: (&Point, &Point),
+    l2: (&Point, &Point),
+    expected: Option<LineIntersection>,
+) {
     let line1 = Line::from_points(l1.0, l1.1).unwrap();
     let line1_rev = Line::from_points(l1.1, l1.0).unwrap();
 
@@ -149,20 +153,28 @@ fn check_lines_intersect(l1: (&Point, &Point), l2: (&Point, &Point), expected_eq
     let line2_rev = Line::from_points(l2.1, l2.0).unwrap();
 
     // 1.
-    assert_eq!(expected_eq, line1.intersects(&line2));
-    assert_eq!(expected_eq, line2.intersects(&line1));
+    assert_eq!(expected, line1.intersection(&line2));
+    assert_eq!(expected, line2.intersection(&line1));
+    assert_eq!(expected.is_some(), line1.intersects(&line2));
+    assert_eq!(expected.is_some(), line2.intersects(&line1));
 
     // 2.
-    assert_eq!(expected_eq, line1_rev.intersects(&line2));
-    assert_eq!(expected_eq, line2.intersects(&line1_rev));
+    assert_eq!(expected, line1_rev.intersection(&line2));
+    assert_eq!(expected, line2.intersection(&line1_rev));
+    assert_eq!(expected.is_some(), line1_rev.intersects(&line2));
+    assert_eq!(expected.is_some(), line2.intersects(&line1_rev));
 
     // 3.
-    assert_eq!(expected_eq, line1.intersects(&line2_rev));
-    assert_eq!(expected_eq, line2_rev.intersects(&line1));
+    assert_eq!(expected, line1.intersection(&line2_rev));
+    assert_eq!(expected, line2_rev.intersection(&line1));
+    assert_eq!(expected.is_some(), line1.intersects(&line2_rev));
+    assert_eq!(expected.is_some(), line2_rev.intersects(&line1));
 
     // 4.
-    assert_eq!(expected_eq, line1_rev.intersects(&line2_rev));
-    assert_eq!(expected_eq, line2_rev.intersects(&line1_rev));
+    assert_eq!(expected, line1_rev.intersection(&line2_rev));
+    assert_eq!(expected, line2_rev.intersection(&line1_rev));
+    assert_eq!(expected.is_some(), line1_rev.intersects(&line2_rev));
+    assert_eq!(expected.is_some(), line2_rev.intersects(&line1_rev));
 }
 
 #[test]
@@ -170,7 +182,11 @@ fn lines_intersect_perpendicular() {
     let line1 = (&Point::new(0, 0), &Point::new(2, 0));
     let line2 = (&Point::new(1, -1), &Point::new(1, 1));
 
-    check_lines_intersect(line1, line2, true);
+    check_lines_intersect(
+        line1,
+        line2,
+        Some(LineIntersection::Point(Point::new(1, 0))),
+    );
 }
 
 #[test]
@@ -178,7 +194,11 @@ fn lines_intersect_touch_perpendicular() {
     let line1 = (&Point::new(0, 0), &Point::new(2, 0));
     let line2 = (&Point::new(0, 0), &Point::new(0, 1));
 
-    check_lines_intersect(line1, line2, true);
+    check_lines_intersect(
+        line1,
+        line2,
+        Some(LineIntersection::Point(Point::new(0, 0))),
+    )
 }
 
 #[test]
@@ -186,7 +206,13 @@ fn lines_intersect_parallel() {
     let line1 = (&Point::new(0, 0), &Point::new(2, 0));
     let line2 = (&Point::new(1, 0), &Point::new(3, 0));
 
-    check_lines_intersect(line1, line2, true);
+    check_lines_intersect(
+        line1,
+        line2,
+        Some(LineIntersection::Line(
+            Line::from_points(Point::new(1, 0), Point::new(2, 0)).unwrap(),
+        )),
+    );
 }
 
 #[test]
@@ -194,7 +220,11 @@ fn lines_intersect_touch_parallel() {
     let line1 = (&Point::new(0, 0), &Point::new(2, 0));
     let line2 = (&Point::new(2, 0), &Point::new(3, 0));
 
-    check_lines_intersect(line1, line2, true);
+    check_lines_intersect(
+        line1,
+        line2,
+        Some(LineIntersection::Point(Point::new(2, 0))),
+    );
 }
 
 #[test]
@@ -202,7 +232,7 @@ fn lines_intersect_perpendicular_disjoint() {
     let line1 = (&Point::new(0, 0), &Point::new(2, 0));
     let line2 = (&Point::new(1, 1), &Point::new(1, 2));
 
-    check_lines_intersect(line1, line2, false);
+    check_lines_intersect(line1, line2, None);
 }
 
 #[test]
@@ -210,7 +240,7 @@ fn lines_intersect_parallel_disjoint() {
     let line1 = (&Point::new(0, 0), &Point::new(2, 0));
     let line2 = (&Point::new(3, 0), &Point::new(4, 0));
 
-    check_lines_intersect(line1, line2, false);
+    check_lines_intersect(line1, line2, None);
 }
 
 #[test]
@@ -219,6 +249,9 @@ fn half_line_intersects_line_true() {
     let dir = Direction::LEFT;
 
     let line = Line::from_points(Point::new(-1, -1), Point::new(-1, 1)).unwrap();
+
+    let expected_intersection = Some(LineIntersection::Point(Point::new(-1, 0)));
+    assert_eq!(expected_intersection, line.intersection_with_half_line(&point, dir));
     assert!(line.intersects_half_line(&point, dir));
 }
 
@@ -228,6 +261,7 @@ fn half_line_intersects_line_false_wrong_direction() {
     let dir = Direction::RIGHT;
 
     let line = Line::from_points(Point::new(-1, -1), Point::new(-1, 1)).unwrap();
+    assert_eq!(None, line.intersection_with_half_line(&point, dir));
     assert!(!line.intersects_half_line(&point, dir));
 }
 
@@ -237,6 +271,7 @@ fn half_line_intersects_line_false_above_half_line() {
     let dir = Direction::LEFT;
 
     let line = Line::from_points(Point::new(-1, -2), Point::new(-1, -1)).unwrap();
+    assert_eq!(None, line.intersection_with_half_line(&point, dir));
     assert!(!line.intersects_half_line(&point, dir));
 }
 
@@ -275,9 +310,29 @@ fn path_simple_motion() {
 #[test]
 fn path_collinear_motion() {
     let old_points = &[Point::new(0, 0), Point::new(1, 0)];
-    let mut path = Path::with_points(old_points).unwrap();
+    let mut path = Path::with_points(old_points.iter()).unwrap();
 
     let new_point = Point::new(2, 0);
+
+    path.add(new_point).unwrap();
+
+    let expected = {
+        let mut temp = old_points.to_vec();
+        *temp.last_mut().unwrap() = new_point;
+        temp
+    };
+
+    let new_points = path.points();
+
+    assert_eq!(expected, new_points);
+}
+
+#[test]
+fn path_collinear_motion_backwards() {
+    let old_points = &[Point::new(0, 0), Point::new(2, 0)];
+    let mut path = Path::with_points(old_points.iter()).unwrap();
+
+    let new_point = Point::new(1, 0);
 
     path.add(new_point).unwrap();
 
@@ -301,7 +356,7 @@ fn path_loop_resolved() {
         Point::new(8, 1),
     ];
 
-    let mut path = Path::with_points(&points).unwrap();
+    let mut path = Path::with_points(points.iter()).unwrap();
     let new_point = Point::new(8, 0);
     path.add(new_point).unwrap();
 
@@ -320,11 +375,55 @@ fn path_loop_resolved_when_crossing_without_stopping() {
         Point::new(8, 1),
     ];
 
-    let mut path = Path::with_points(&points).unwrap();
+    let mut path = Path::with_points(points.iter()).unwrap();
     let new_point = Point::new(8, -1);
     path.add(new_point).unwrap();
 
     let exp = [Point::origin(), Point::new(8, 0), Point::new(8, -1)];
+    let new_points = path.points();
+
+    assert_eq!(exp, new_points);
+}
+
+#[test]
+fn path_loop_resolved_through_collinear_segment() {
+    let points = [
+        Point::new(0, 0),
+        Point::new(10, 0),
+        Point::new(10, 10),
+        Point::new(8, 10),
+        Point::new(8, 20),
+        Point::new(10, 20),
+        Point::new(10, 20),
+    ];
+
+    let mut path = Path::with_points(points.iter()).unwrap();
+    let new_point = Point::new(10, -1);
+    path.add(new_point).unwrap();
+
+    let exp = [Point::origin(), Point::new(10, 0), Point::new(10, -1)];
+    let new_points = path.points();
+
+    assert_eq!(exp, new_points);
+}
+
+#[test]
+fn path_loop_resolved_into_collinear_segment() {
+    let points = [
+        Point::new(0, 0),
+        Point::new(10, 0),
+        Point::new(10, 10),
+        Point::new(8, 10),
+        Point::new(8, 20),
+        Point::new(10, 20),
+        Point::new(10, 20),
+    ];
+
+    let mut path = Path::with_points(points.iter()).unwrap();
+    let new_point = Point::new(10, 5);
+    path.add(new_point).unwrap();
+
+    let exp = [Point::origin(), Point::new(10, 0), Point::new(10, 5)];
     let new_points = path.points();
 
     assert_eq!(exp, new_points);
@@ -340,7 +439,7 @@ fn path_insertion_point_found() {
         Point::new(10, 20),
         Point::new(0, 20),
     ];
-    let path = Path::with_points(&points).unwrap();
+    let path = Path::with_points(points.iter()).unwrap();
 
     let point = Point::new(10, 15);
 
@@ -360,7 +459,7 @@ fn path_no_insertion_point_collinear() {
         Point::new(10, 20),
         Point::new(0, 20),
     ];
-    let path = Path::with_points(&points).unwrap();
+    let path = Path::with_points(points.iter()).unwrap();
 
     let point = Point::new(-10, 0);
 
@@ -380,7 +479,7 @@ fn path_no_insertion_point_not_collinear() {
         Point::new(10, 20),
         Point::new(0, 20),
     ];
-    let path = Path::with_points(&points).unwrap();
+    let path = Path::with_points(points.iter()).unwrap();
 
     let point = Point::new(10, 1);
 
@@ -407,7 +506,7 @@ fn polygon_one_vertex_error() {
 
 #[test]
 fn polygon_two_vertices_error() {
-    let path = Path::with_points(&[Point::new(0, 0), Point::new(1, 0)]).unwrap();
+    let path = Path::with_points([Point::new(0, 0), Point::new(1, 0)].iter()).unwrap();
     let poly = Polygon::with_path(path);
 
     assert_eq!(Some(PolygonError::NotEnoughVertices), poly.err());
@@ -415,7 +514,8 @@ fn polygon_two_vertices_error() {
 
 #[test]
 fn polygon_three_vertices_error() {
-    let path = Path::with_points(&[Point::new(0, 0), Point::new(1, 0), Point::new(2, 0)]).unwrap();
+    let path =
+        Path::with_points([Point::new(0, 0), Point::new(1, 0), Point::new(2, 0)].iter()).unwrap();
     let poly = Polygon::with_path(path);
 
     assert_eq!(Some(PolygonError::NotEnoughVertices), poly.err());
@@ -423,12 +523,15 @@ fn polygon_three_vertices_error() {
 
 #[test]
 fn polygon_non_rectilinear_error() {
-    let path = Path::with_points(&[
-        Point::new(0, 0),
-        Point::new(10, 0),
-        Point::new(10, 10),
-        Point::new(8, 10),
-    ])
+    let path = Path::with_points(
+        [
+            Point::new(0, 0),
+            Point::new(10, 0),
+            Point::new(10, 10),
+            Point::new(8, 10),
+        ]
+        .iter(),
+    )
     .unwrap();
     let poly = Polygon::with_path(path);
 
@@ -437,16 +540,19 @@ fn polygon_non_rectilinear_error() {
 
 #[test]
 fn polygon_self_intersecting_end_error() {
-    let path = Path::with_points(&[
-        Point::new(0, 0),
-        Point::new(10, 0),
-        Point::new(10, 10),
-        Point::new(-2, 10),
-        Point::new(-2, 20),
-        Point::new(10, 20),
-        Point::new(10, 30),
-        Point::new(0, 30),
-    ])
+    let path = Path::with_points(
+        [
+            Point::new(0, 0),
+            Point::new(10, 0),
+            Point::new(10, 10),
+            Point::new(-2, 10),
+            Point::new(-2, 20),
+            Point::new(10, 20),
+            Point::new(10, 30),
+            Point::new(0, 30),
+        ]
+        .iter(),
+    )
     .unwrap();
     let poly = Polygon::with_path(path);
 
@@ -455,12 +561,15 @@ fn polygon_self_intersecting_end_error() {
 
 #[test]
 fn polygon_ok() {
-    let path = Path::with_points(&[
-        Point::new(0, 0),
-        Point::new(10, 0),
-        Point::new(10, 10),
-        Point::new(0, 10),
-    ])
+    let path = Path::with_points(
+        [
+            Point::new(0, 0),
+            Point::new(10, 0),
+            Point::new(10, 10),
+            Point::new(0, 10),
+        ]
+        .iter(),
+    )
     .unwrap();
     let poly = Polygon::with_path(path);
 
@@ -485,7 +594,7 @@ fn polygon_area_rectangle() {
         Point::new(20, 10),
         Point::new(0, 10),
     ];
-    let path = Path::with_points(&points).unwrap();
+    let path = Path::with_points(points.iter()).unwrap();
     let poly = Polygon::with_path(path).unwrap();
 
     let exp = 200;
@@ -503,7 +612,7 @@ fn polygon_area_complex() {
         Point::new(10, 20),
         Point::new(0, 20),
     ];
-    let path = Path::with_points(&points).unwrap();
+    let path = Path::with_points(points.iter()).unwrap();
     let poly = Polygon::with_path(path).unwrap();
 
     let exp = 200 + 100;
@@ -521,7 +630,7 @@ fn polygon_insertion_point_found() {
         Point::new(10, 20),
         Point::new(0, 20),
     ];
-    let path = Path::with_points(&points).unwrap();
+    let path = Path::with_points(points.iter()).unwrap();
     let poly = Polygon::with_path(path).unwrap();
 
     let point = Point::new(10, 15);
@@ -542,7 +651,7 @@ fn polygon_insertion_point_found_at_end() {
         Point::new(10, 20),
         Point::new(0, 20),
     ];
-    let path = Path::with_points(&points).unwrap();
+    let path = Path::with_points(points.iter()).unwrap();
     let poly = Polygon::with_path(path).unwrap();
 
     let point = Point::new(0, 10);
@@ -563,7 +672,7 @@ fn polygon_insertion_no_point() {
         Point::new(10, 20),
         Point::new(0, 20),
     ];
-    let path = Path::with_points(&points).unwrap();
+    let path = Path::with_points(points.iter()).unwrap();
     let poly = Polygon::with_path(path).unwrap();
 
     let point = Point::new(5, 10);
@@ -590,8 +699,8 @@ fn polygon_eq_not_equal() {
         Point::new(0, 10),
     ];
 
-    let path1 = Path::with_points(&points1).unwrap();
-    let path2 = Path::with_points(&points2).unwrap();
+    let path1 = Path::with_points(points1.iter()).unwrap();
+    let path2 = Path::with_points(points2.iter()).unwrap();
     let poly1 = Polygon::with_path(path1.clone()).unwrap();
     let poly2 = Polygon::with_path(path2.clone()).unwrap();
 
@@ -608,17 +717,17 @@ fn polygon_eq_rotated() {
         Point::new(10, 20),
         Point::new(0, 20),
     ];
-    let poly_path = Path::with_points(&points).unwrap();
+    let poly_path = Path::with_points(points.iter()).unwrap();
     let poly_orig = Polygon::with_path(poly_path.clone()).unwrap();
 
     for i in 0..points.len() {
         points.rotate_left(i);
-        let path = Path::with_points(&points).unwrap();
+        let path = Path::with_points(points.iter()).unwrap();
         let poly = Polygon::with_path(path.clone()).unwrap();
         assert_eq!(poly_orig, poly);
 
         let reversed_points = points.iter().rev().map(|&p| p).collect::<Vec<Point>>();
-        let path_rev = Path::with_points(&reversed_points[..]).unwrap();
+        let path_rev = Path::with_points(reversed_points[..].iter()).unwrap();
         let poly_rev = Polygon::with_path(path_rev.clone()).unwrap();
         assert_eq!(poly_orig, poly_rev);
     }
@@ -634,7 +743,7 @@ fn polygon_iterator() {
         Point::new(10, 20),
         Point::new(0, 20),
     ];
-    let poly_path = Path::with_points(&points).unwrap();
+    let poly_path = Path::with_points(points.iter()).unwrap();
     let poly_orig = Polygon::with_path(poly_path.clone()).unwrap();
 
     for i in 0..points.len() {
@@ -655,7 +764,7 @@ fn polygon_iterator_rev() {
         Point::new(10, 20),
         Point::new(0, 20),
     ];
-    let poly_path = Path::with_points(&points).unwrap();
+    let poly_path = Path::with_points(points.iter()).unwrap();
     let poly_orig = Polygon::with_path(poly_path.clone()).unwrap();
 
     for i in 0..points.len() {
@@ -677,7 +786,7 @@ fn polygon_line_iterator() {
         Point::new(10, 20),
         Point::new(0, 20),
     ];
-    let poly_path = Path::with_points(&points).unwrap();
+    let poly_path = Path::with_points(points.iter()).unwrap();
     let poly = Polygon::with_path(poly_path.clone()).unwrap();
 
     let expected: Vec<_> = {
@@ -685,7 +794,11 @@ fn polygon_line_iterator() {
             .iter()
             .chain(iter::once(points.first().unwrap()))
             .skip(1);
-        points.iter().zip(rotated).map(|(p1, p2)| Line::from_points(p1, p2).unwrap()).collect()
+        points
+            .iter()
+            .zip(rotated)
+            .map(|(p1, p2)| Line::from_points(p1, p2).unwrap())
+            .collect()
     };
 
     let res: Vec<_> = poly.line_iter().collect();
@@ -705,7 +818,7 @@ fn polygon_inside() {
         Point::new(20, 30),
         Point::new(0, 30),
     ];
-    let poly_path = Path::with_points(&points).unwrap();
+    let poly_path = Path::with_points(points.iter()).unwrap();
     let poly = Polygon::with_path(poly_path.clone()).unwrap();
 
     let inside_points = vec![
@@ -746,13 +859,13 @@ fn polygon_test_cut_path_both_directions(
     expected2_points: &[Point],
     cut_path: &Path,
 ) {
-    let orig_path = Path::with_points(orig_points).unwrap();
+    let orig_path = Path::with_points(orig_points.iter()).unwrap();
     let orig = Polygon::with_path(orig_path).unwrap();
 
-    let expected1_path = Path::with_points(&expected1_points).unwrap();
+    let expected1_path = Path::with_points(expected1_points.iter()).unwrap();
     let expected1 = Polygon::with_path(expected1_path).unwrap();
 
-    let expected2_path = Path::with_points(&expected2_points).unwrap();
+    let expected2_path = Path::with_points(expected2_points.iter()).unwrap();
     let expected2 = Polygon::with_path(expected2_path).unwrap();
 
     {
@@ -762,15 +875,8 @@ fn polygon_test_cut_path_both_directions(
     }
 
     {
-        let cut_path_reversed = Path::with_points(
-            &cut_path
-                .points()
-                .iter()
-                .rev()
-                .map(|&p| p)
-                .collect::<Vec<_>>(),
-        )
-        .unwrap();
+        let cut_path_reversed =
+            Path::with_points(cut_path.points().iter().rev().map(|&p| p)).unwrap();
         let (poly1, poly2) = orig.cut(&cut_path_reversed).unwrap();
         let res = (&poly1, &poly2);
         assert!(res == (&expected1, &expected2) || res == (&expected2, &expected2));
@@ -788,7 +894,7 @@ fn polygon_cut_mid_line() {
         Point::new(0, 20),
     ];
 
-    let cutting_path = Path::with_points(&[Point::new(15, 0), Point::new(15, 10)]).unwrap();
+    let cutting_path = Path::with_points([Point::new(15, 0), Point::new(15, 10)].iter()).unwrap();
 
     let points1 = [
         Point::new(0, 0),
@@ -820,7 +926,7 @@ fn polygon_cut_mid_line_and_vertex() {
         Point::new(0, 20),
     ];
 
-    let cutting_path = Path::with_points(&[Point::new(10, 0), Point::new(10, 10)]).unwrap();
+    let cutting_path = Path::with_points([Point::new(10, 0), Point::new(10, 10)].iter()).unwrap();
 
     let points1 = [
         Point::new(0, 0),
@@ -852,7 +958,7 @@ fn polygon_cut_vertex_and_vertex() {
         Point::new(0, 30),
     ];
 
-    let cutting_path = Path::with_points(&[Point::new(10, 10), Point::new(10, 20)]).unwrap();
+    let cutting_path = Path::with_points([Point::new(10, 10), Point::new(10, 20)].iter()).unwrap();
 
     let points1 = [
         Point::new(0, 0),
@@ -880,12 +986,15 @@ fn polygon_cut_same_insertion_point() {
         Point::new(0, 10),
     ];
 
-    let cutting_path = Path::with_points(&[
-        Point::new(1, 0),
-        Point::new(1, 1),
-        Point::new(9, 1),
-        Point::new(9, 0),
-    ])
+    let cutting_path = Path::with_points(
+        [
+            Point::new(1, 0),
+            Point::new(1, 1),
+            Point::new(9, 1),
+            Point::new(9, 0),
+        ]
+        .iter(),
+    )
     .unwrap();
 
     let points1 = [
@@ -917,29 +1026,20 @@ fn polygon_cut_path_does_not_start_or_end_on_edge() {
         Point::new(10, 10),
         Point::new(0, 10),
     ];
-    let poly_path = Path::with_points(&points).unwrap();
+    let poly_path = Path::with_points(points.iter()).unwrap();
     let poly = Polygon::with_path(poly_path).unwrap();
 
-    let cutting_path1 = Path::with_points(&[
-        Point::new(1, 1),
-        Point::new(9, 1),
-    ]).unwrap();
+    let cutting_path1 = Path::with_points([Point::new(1, 1), Point::new(9, 1)].iter()).unwrap();
 
     assert_eq!(None, poly.cut(&cutting_path1));
 
-    let cutting_path2 = Path::with_points(&[
-        Point::new(1, 0),
-        Point::new(1, 1),
-        Point::new(9, 1),
-    ]).unwrap();
+    let cutting_path2 =
+        Path::with_points([Point::new(1, 0), Point::new(1, 1), Point::new(9, 1)].iter()).unwrap();
 
     assert_eq!(None, poly.cut(&cutting_path2));
 
-    let cutting_path3 = Path::with_points(&[
-        Point::new(1, 1),
-        Point::new(9, 1),
-        Point::new(9, 0),
-    ]).unwrap();
+    let cutting_path3 =
+        Path::with_points([Point::new(1, 1), Point::new(9, 1), Point::new(9, 0)].iter()).unwrap();
 
     assert_eq!(None, poly.cut(&cutting_path3));
 }
@@ -952,15 +1052,18 @@ fn polygon_cut_path_outside() {
         Point::new(10, 10),
         Point::new(0, 10),
     ];
-    let poly_path = Path::with_points(&points).unwrap();
+    let poly_path = Path::with_points(points.iter()).unwrap();
     let poly = Polygon::with_path(poly_path).unwrap();
 
-    let cutting_path = Path::with_points(&[
-        Point::new(1, 0),
-        Point::new(1, -1),
-        Point::new(9, -1),
-        Point::new(9, 0),
-    ])
+    let cutting_path = Path::with_points(
+        [
+            Point::new(1, 0),
+            Point::new(1, -1),
+            Point::new(9, -1),
+            Point::new(9, 0),
+        ]
+        .iter(),
+    )
     .unwrap();
 
     assert_eq!(None, poly.cut(&cutting_path));
@@ -974,19 +1077,22 @@ fn polygon_cut_path_partly_outside() {
         Point::new(10, 10),
         Point::new(0, 10),
     ];
-    let poly_path = Path::with_points(&points).unwrap();
+    let poly_path = Path::with_points(points.iter()).unwrap();
     let poly = Polygon::with_path(poly_path).unwrap();
 
-    let cutting_path = Path::with_points(&[
-        Point::new(1, 0),
-        Point::new(1, -1),
-        Point::new(2, -1),
-        Point::new(2, 1),
-        Point::new(4, 1),
-        Point::new(4, -1),
-        Point::new(9, -1),
-        Point::new(9, 0),
-    ])
+    let cutting_path = Path::with_points(
+        [
+            Point::new(1, 0),
+            Point::new(1, -1),
+            Point::new(2, -1),
+            Point::new(2, 1),
+            Point::new(4, 1),
+            Point::new(4, -1),
+            Point::new(9, -1),
+            Point::new(9, 0),
+        ]
+        .iter(),
+    )
     .unwrap();
 
     assert_eq!(None, poly.cut(&cutting_path));
@@ -1000,19 +1106,22 @@ fn polygon_cut_path_multiple_edge_touches() {
         Point::new(10, 10),
         Point::new(0, 10),
     ];
-    let poly_path = Path::with_points(&points).unwrap();
+    let poly_path = Path::with_points(points.iter()).unwrap();
     let poly = Polygon::with_path(poly_path).unwrap();
 
-    let cutting_path = Path::with_points(&[
-        Point::new(1, 0),
-        Point::new(1, 1),
-        Point::new(2, 1),
-        Point::new(2, 0),
-        Point::new(4, 0),
-        Point::new(4, 1),
-        Point::new(9, 1),
-        Point::new(9, 0),
-    ])
+    let cutting_path = Path::with_points(
+        [
+            Point::new(1, 0),
+            Point::new(1, 1),
+            Point::new(2, 1),
+            Point::new(2, 0),
+            Point::new(4, 0),
+            Point::new(4, 1),
+            Point::new(9, 1),
+            Point::new(9, 0),
+        ]
+        .iter(),
+    )
     .unwrap();
 
     assert_eq!(None, poly.cut(&cutting_path));
