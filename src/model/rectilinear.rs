@@ -119,12 +119,7 @@ impl<PointT: Borrow<Point>> Line<PointT> {
         intervals_overlap(l1_h, l2_h) && intervals_overlap(l1_v, l2_v)
     }
 
-    pub fn intersects_half_line(
-        &self,
-        half_line_point: &Point,
-        half_line_dir: Direction,
-    ) -> bool
-    {
+    pub fn intersects_half_line(&self, half_line_point: &Point, half_line_dir: Direction) -> bool {
         // TODO: Better solution?
         let half_line_end = {
             let mut pt = *half_line_point;
@@ -264,13 +259,7 @@ impl Path {
     }
 
     pub fn insertion_point(&self, point: &Point) -> Option<usize> {
-        for (i, line) in self.line_iter().enumerate() {
-            if line.contains(point) {
-                return Some(i + 1);
-            }
-        }
-
-        None
+        insertion_point(self.line_iter(), point)
     }
 
     pub fn contains(&self, point: &Point) -> bool {
@@ -291,6 +280,20 @@ impl Path {
             }
         }
     }
+}
+
+fn insertion_point<PointT, Iter>(iter: Iter, point: &Point) -> Option<usize>
+where
+    Iter: Iterator<Item = Line<PointT>>,
+    PointT: Borrow<Point>,
+{
+    for (i, line) in iter.enumerate() {
+        if line.contains(point) {
+            return Some(i + 1);
+        }
+    }
+
+    None
 }
 
 /// A rectilinear polygon.
@@ -315,15 +318,23 @@ impl Polygon {
             &[_, _] => Err(PolygonError::NotEnoughVertices),
             &[_, _, _] => Err(PolygonError::NotEnoughVertices),
             &[first, _, _, .., last] => {
-                // TODO: Find more efficient way than checking all points on the path.
-                if let Some(mut iter) = generate_rectilinear_path(last, false, first, false) {
-                    if iter.any(|point| path.contains(&point)) {
-                        Err(PolygonError::SelfIntersecting)
-                    } else {
-                        Ok(Polygon { path_: path })
-                    }
+                let last_line =
+                    Line::from_points(last, first).ok_or(PolygonError::NonRectilinear)?;
+
+                // The first and the last line segments in the path always intersect last_line at
+                // the end vertices, therefore they are filtered out. The other line segments
+                // should not, otherwise the polygon is self-intersecting.
+                let num_line_segments = path.points().len() - 1;
+                let intersecting_lines = path
+                    .line_iter()
+                    .take(num_line_segments - 1) // Filter out the last line segment.
+                    .skip(1) // Filter out the first line segment.
+                    .any(|line| line.intersects(&last_line));
+
+                if intersecting_lines {
+                    Err(PolygonError::SelfIntersecting)
                 } else {
-                    Err(PolygonError::NonRectilinear)
+                    Ok(Polygon { path_: path })
                 }
             }
         }
@@ -366,24 +377,8 @@ impl Polygon {
     }
 
     pub fn insertion_point(&self, point: &Point) -> Option<usize> {
-        let in_path = self.path_.insertion_point(point);
-
-        if in_path.is_some() {
-            return in_path;
-        }
-
-        if let &[first, .., last] = self.path_.points() {
-            // TODO: Use line segment iterator?
-            let line = Line::from_points(last, first).unwrap();
-            if line.contains(point) {
-                return Some(0);
-            }
-        } else {
-            // We always have at least four vertices.
-            unreachable!();
-        }
-
-        None
+        let path_len = self.path().points().len();
+        insertion_point(self.line_iter(), point).map(|ind| ind % path_len)
     }
 
     pub fn is_on_edge(&self, point: &Point) -> bool {
