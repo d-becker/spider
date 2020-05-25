@@ -89,7 +89,7 @@ impl<PointT: Borrow<Point>> Line<PointT> {
         PointT2: Borrow<Point>,
     {
         let p1 = self.start().borrow();
-        let p2 = self.start().borrow();
+        let p2 = self.end().borrow();
         let p3 = p.borrow();
 
         vertical_collinear(p1, p2, p3) || horizontal_collinear(p1, p2, p3)
@@ -264,43 +264,23 @@ impl Path {
             }
 
             let new_line = Line::from_points(last_point, &point).ok_or("Not rectilinear.")?;
+            let points_to_add = self.compute_real_points_to_add(&new_line, point);
 
-            let mut points_to_add = vec![point];
-
-            // We do not need the last line segment, that is always connected at the end and if
-            // there are further connections, it is handled in 'handle_loop'.
-            let num_of_lines = self.points().len() - 1;
-            for line in self.line_iter().take(num_of_lines.saturating_sub(1))  {
-                let intersection = line.intersection(&new_line);
-                if let Some(int) = intersection {
-                    match int {
-                        LineIntersection::Point(point) => {
-                            if point != points_to_add[0] {
-                                points_to_add.push(point);
-                            }
-                        }
-                        LineIntersection::Line(line) => {
-                            let pt = line.start; // Does it matter which end?
-                            if pt != points_to_add[0] {
-                                points_to_add.push(pt);
-                            }
-                        }
-                    }
-
-                    break;
-                }
-            }
-
-            for pt in points_to_add.iter().rev() {
+            for pt in points_to_add {
                 self.handle_loop(&pt);
                 self.handle_collinearity(&pt);
 
-                self.points_.push(*pt);
+                self.points_.push(pt);
             }
         } else {
             self.points_.push(point);
         }
+
         Result::Ok(())
+    }
+
+    pub fn remove(&mut self) -> Option<Point> {
+        self.points_.pop()
     }
 
     pub fn insertion_point(&self, point: &Point) -> Option<usize> {
@@ -311,6 +291,40 @@ impl Path {
         self.insertion_point(point).is_some()
     }
 
+    fn compute_real_points_to_add(
+        &self,
+        new_line: &Line<&Point>,
+        point: Point,
+    ) -> impl Iterator<Item = Point> {
+        let mut points_to_add = vec![point];
+
+        // We do not need the last line segment, that is always connected at the end and if
+        // there are further connections, it is handled in 'handle_loop'.
+        let num_of_lines = self.points().len() - 1;
+        for line in self.line_iter().take(num_of_lines.saturating_sub(1)) {
+            let intersection = line.intersection(&new_line);
+            if let Some(int) = intersection {
+                match int {
+                    LineIntersection::Point(point) => {
+                        if point != points_to_add[0] {
+                            points_to_add.push(point);
+                        }
+                    }
+                    LineIntersection::Line(line) => {
+                        let pt = line.start(); // Does it matter which end?
+                        if pt != &points_to_add[0] {
+                            points_to_add.push(*pt);
+                        }
+                    }
+                }
+
+                break;
+            }
+        }
+
+        points_to_add.into_iter().rev()
+    }
+
     fn handle_loop(&mut self, new_pos: &Point) {
         if let Some(i) = self.insertion_point(new_pos) {
             self.points_.truncate(i);
@@ -318,7 +332,7 @@ impl Path {
     }
 
     fn handle_collinearity(&mut self, new_pos: &Point) {
-        // Is .last() inefficient.
+        // TODO: Is .last() inefficient.
         if let Some(line) = self.line_iter().last() {
             if line.collinear(new_pos) {
                 self.points_.pop();
@@ -356,15 +370,25 @@ pub enum PolygonError {
 
 impl Polygon {
     /// An implicit edge is assumed between the last and the first point.
-    pub fn with_path(path: Path) -> Result<Polygon, PolygonError> {
+    pub fn with_path(mut path: Path) -> Result<Polygon, PolygonError> {
         match &path.points() {
             &[] => Ok(Polygon { path_: path }),
             &[_] => Err(PolygonError::NotEnoughVertices),
             &[_, _] => Err(PolygonError::NotEnoughVertices),
             &[_, _, _] => Err(PolygonError::NotEnoughVertices),
-            &[first, _, _, .., last] => {
-                let last_line =
-                    Line::from_points(last, first).ok_or(PolygonError::NonRectilinear)?;
+            &[first, _, .., second_last, last] => {
+                let last_line = {
+                    let (first, second_last, last) = (*first, *second_last, *last);
+                    let line =
+                        Line::from_points(last, first).ok_or(PolygonError::NonRectilinear)?;
+
+                    if line.collinear(second_last) {
+                        path.remove();
+                        Line::from_points(second_last, first).unwrap()
+                    } else {
+                        line
+                    }
+                };
 
                 // The first and the last line segments in the path always intersect last_line at
                 // the end vertices, therefore they are filtered out. The other line segments
@@ -377,10 +401,10 @@ impl Polygon {
                     .any(|line| line.intersects(&last_line));
 
                 if intersecting_lines {
-                    Err(PolygonError::SelfIntersecting)
-                } else {
-                    Ok(Polygon { path_: path })
+                    return Err(PolygonError::SelfIntersecting);
                 }
+
+                Ok(Polygon { path_: path })
             }
         }
     }

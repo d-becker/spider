@@ -98,6 +98,17 @@ fn collinear_false() {
 }
 
 #[test]
+fn collinear_false_2() {
+    let p1 = Point::new(0, 10);
+    let p2 = Point::new(0, 0);
+    let line = Line::from_points(p1, p2).unwrap();
+
+    let p3 = Point::new(20, 10);
+
+    assert!(!line.collinear(p3));
+}
+
+#[test]
 fn line_contains_inside() {
     let start = Point::new(2, 1);
     let end = Point::new(4, 1);
@@ -731,6 +742,31 @@ fn polygon_eq_rotated() {
         let poly_rev = Polygon::with_path(path_rev.clone()).unwrap();
         assert_eq!(poly_orig, poly_rev);
     }
+}
+
+#[test]
+fn polygon_eq_extra_path_point() {
+    let points1 = [
+        Point::new(0, 0),
+        Point::new(20, 0),
+        Point::new(20, 10),
+        Point::new(0, 10),
+    ];
+
+    let points2 = [
+        Point::new(0, 0),
+        Point::new(20, 0),
+        Point::new(20, 10),
+        Point::new(0, 10),
+        Point::new(0, 5),
+    ];
+
+    let path1 = Path::with_points(points1.iter()).unwrap();
+    let path2 = Path::with_points(points2.iter()).unwrap();
+    let poly1 = Polygon::with_path(path1.clone()).unwrap();
+    let poly2 = Polygon::with_path(path2.clone()).unwrap();
+
+    assert_eq!(poly1, poly2);
 }
 
 #[test]
