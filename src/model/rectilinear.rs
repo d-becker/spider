@@ -250,7 +250,7 @@ impl Path {
         &self.points_
     }
 
-    pub fn line_iter(&self) -> impl Iterator<Item = Line<&Point>> {
+    pub fn line_iter(&self) -> impl DoubleEndedIterator<Item = Line<&Point>> {
         self.points()
             .iter()
             .zip(self.points().iter().skip(1))
@@ -332,8 +332,8 @@ impl Path {
     }
 
     fn handle_collinearity(&mut self, new_pos: &Point) {
-        // TODO: Is .last() inefficient.
-        if let Some(line) = self.line_iter().last() {
+        let last_line_opt = self.line_iter().rev().next();
+        if let Some(line) = last_line_opt {
             if line.collinear(new_pos) {
                 self.points_.pop();
             }
@@ -416,14 +416,16 @@ impl Polygon {
     pub fn vertex_iter_from_ind<'a>(
         &'a self,
         start_idx: usize,
-    ) -> impl DoubleEndedIterator<Item = Point> + 'a {
-        RotatedIterator::new(self.path().points(), start_idx)
+    ) -> impl DoubleEndedIterator<Item = &Point> + 'a {
+        let first_part = self.path().points().iter().skip(start_idx);
+        let second_part = self.path().points().iter().take(start_idx);
+        first_part.chain(second_part)
     }
 
     pub fn vertex_iter_from_ind_backwards<'a>(
         &'a self,
         start_idx: usize,
-    ) -> impl DoubleEndedIterator<Item = Point> + 'a {
+    ) -> impl DoubleEndedIterator<Item = &Point> + 'a {
         self.vertex_iter_from_ind(start_idx + 1).rev()
     }
 
@@ -567,7 +569,6 @@ impl Polygon {
 }
 
 impl PartialEq for Polygon {
-    // TODO: Handle possible collinear vertices between the last and the first.
     fn eq(&self, other: &Polygon) -> bool {
         let self_points = self.path().points();
         let other_points = other.path().points();
@@ -616,68 +617,6 @@ fn is_eq_backward(vertices1: &[Point], vertices2: &[Point], offset: usize) -> bo
     let mut vertex_pairs = vertices1.iter().zip(other_iter);
 
     vertex_pairs.all(|(v1, v2)| v1 == v2)
-}
-
-struct RotatedIterator<'a> {
-    slice: &'a [Point],
-    idx_fwd: usize,
-    idx_back: usize,
-    started_iteration: bool,
-}
-
-impl<'a> RotatedIterator<'a> {
-    pub fn new(slice: &'a [Point], start_idx: usize) -> RotatedIterator {
-        let start_idx = start_idx % slice.len();
-        RotatedIterator {
-            slice: slice,
-            idx_fwd: start_idx,
-            idx_back: start_idx,
-            started_iteration: false,
-        }
-    }
-
-    fn increase_idx(&self, ind: usize) -> usize {
-        (ind + 1) % self.slice.len()
-    }
-
-    fn decrease_idx(&self, ind: usize) -> usize {
-        let mut res = ind;
-        if ind == 0 {
-            res += self.slice.len();
-        }
-
-        res - 1
-    }
-}
-
-impl<'a> Iterator for RotatedIterator<'a> {
-    type Item = Point;
-
-    fn next(&mut self) -> Option<Point> {
-        if self.idx_fwd == self.idx_back && self.started_iteration {
-            None
-        } else {
-            let res = self.slice.get(self.idx_fwd);
-            self.idx_fwd = self.increase_idx(self.idx_fwd);
-            self.started_iteration = true;
-
-            res.map(|&p| p)
-        }
-    }
-}
-
-impl<'a> DoubleEndedIterator for RotatedIterator<'a> {
-    fn next_back(&mut self) -> Option<Point> {
-        if self.idx_fwd == self.idx_back && self.started_iteration {
-            None
-        } else {
-            self.idx_back = self.decrease_idx(self.idx_back);
-            let res = self.slice.get(self.idx_back);
-            self.started_iteration = true;
-
-            res.map(|&p| p)
-        }
-    }
 }
 
 #[cfg(test)]

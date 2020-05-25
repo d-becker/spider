@@ -262,7 +262,10 @@ fn half_line_intersects_line_true() {
     let line = Line::from_points(Point::new(-1, -1), Point::new(-1, 1)).unwrap();
 
     let expected_intersection = Some(LineIntersection::Point(Point::new(-1, 0)));
-    assert_eq!(expected_intersection, line.intersection_with_half_line(&point, dir));
+    assert_eq!(
+        expected_intersection,
+        line.intersection_with_half_line(&point, dir)
+    );
     assert!(line.intersects_half_line(&point, dir));
 }
 
@@ -783,7 +786,10 @@ fn polygon_iterator() {
     let poly_orig = Polygon::with_path(poly_path.clone()).unwrap();
 
     for i in 0..points.len() {
-        let collected = poly_orig.vertex_iter_from_ind(i).collect::<Vec<_>>();
+        let collected = poly_orig
+            .vertex_iter_from_ind(i)
+            .map(|&p| p)
+            .collect::<Vec<_>>();
         assert_eq!(points, collected);
 
         points.rotate_left(1);
@@ -805,7 +811,11 @@ fn polygon_iterator_rev() {
 
     for i in 0..points.len() {
         let expected = points.iter().rev().map(|&p| p).collect::<Vec<_>>();
-        let collected = poly_orig.vertex_iter_from_ind(i).rev().collect::<Vec<_>>();
+        let collected = poly_orig
+            .vertex_iter_from_ind(i)
+            .rev()
+            .map(|&p| p)
+            .collect::<Vec<_>>();
         assert_eq!(expected, collected, "{:?}", i);
 
         points.rotate_left(1);
