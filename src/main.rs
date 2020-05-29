@@ -1,29 +1,34 @@
+use std::rc::Rc;
+use std::cell::RefCell;
+
 use gio::prelude::*;
 use glib::clone;
 use gtk::prelude::*;
 
 use spider_core;
+use spider_core::gui;
 
-// When the application is launched…
-fn on_activate(application: &gtk::Application) {
-    // … create a new window …
-    let window = gtk::ApplicationWindow::new(application);
-    // … with a button in it …
-    let button = gtk::Button::new_with_label("Hello World!");
-    // … which closes the window when clicked
-    button.connect_clicked(clone!(@weak window => move |_| window.destroy()));
+use spider_core::ImmutableRcWrapper;
 
-    window.add(&button);
-    eprintln!("Before show_all.");
-    window.show_all();
-    eprintln!("Returning.");
-}
+use spider_core::model::point::{Direction, Point};
+use spider_core::model::field::Field;
+use spider_core::model::snake::Snake;
+use spider_core::model::spider::Spider;
+use spider_core::model::game::Game;
 
 fn main() {
-    // Create a new application
-    let app = gtk::Application::new(Some("com.github.gtk-rs.examples.basic"), Default::default())
-        .expect("Initialization failed...");
-    app.connect_activate(|app| on_activate(app));
-    // Run the application
-    app.run(&std::env::args().collect::<Vec<_>>());
+    let field = Field::new(50, 20);
+    let spider = Spider::new(Point::new(0, 0), Direction::RIGHT, Point::new(0, 0), Point::new(50, 20));
+    let snake = Snake::new(Point::new(10, 10));
+
+    let game = Game::new(field, spider, snake);
+    let game_rc = Rc::new(RefCell::new(game));
+
+    gtk::init().unwrap();
+    gtk::timeout_add_seconds(1, clone!(@strong game_rc => move || {
+        game_rc.borrow_mut().update_state();
+        Continue(true)
+    }));
+
+    gui::start_gui(ImmutableRcWrapper::from_rc(game_rc.clone()));
 }

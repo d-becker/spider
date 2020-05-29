@@ -19,6 +19,18 @@ impl Game {
         }
     }
 
+    pub fn field(&self) -> &Field {
+        &self.field_
+    }
+
+    pub fn spider(&self) -> &Spider {
+        &self.spider_
+    }
+
+    pub fn snake(&self) -> &Snake {
+        &self.snake_
+    }
+
     pub fn handle_up(&mut self) {
         self.spider_.set_dir(Direction::UP);
     }
@@ -37,6 +49,10 @@ impl Game {
 
     pub fn handle_stop(&mut self) {
         self.spider_.set_dir(Direction::NONE);
+    }
+
+    pub fn handle_pause(&mut self) {
+        unimplemented!();
     }
 
     pub fn update_state(&mut self) {
