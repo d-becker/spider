@@ -1,5 +1,6 @@
 use super::field::Field;
 use super::point::Direction;
+use super::point::Point;
 use super::snake::Snake;
 use super::spider::Spider;
 
@@ -8,6 +9,8 @@ pub struct Game {
     field_: Field,
     spider_: Spider,
     snake_: Snake,
+    paused_: bool,
+    game_over_: bool,
 }
 
 impl Game {
@@ -16,6 +19,8 @@ impl Game {
             field_: field,
             spider_: spider,
             snake_: snake,
+            paused_: false,
+            game_over_: false,
         }
     }
 
@@ -52,10 +57,13 @@ impl Game {
     }
 
     pub fn handle_pause(&mut self) {
-        unimplemented!();
+        self.paused_ = !self.paused_;
     }
 
     pub fn update_state(&mut self) {
+        if self.game_over_ || self.paused_ {
+            return;
+        }
         // Update the snake position.
         // TODO.
         self.snake_.set_pos(
@@ -66,11 +74,43 @@ impl Game {
             ),
         );
 
-        // Set the position of the spider.
-        self.spider_.update();
+        // Detect spider starting or ending path.
+        self.update_spider();
 
         // Detect snake eating spider.
-        // Detect snake starting or ending path.
+        if self.spider().pos() == self.snake().pos() {
+            self.game_over_ = true;
+        }
+
         // Detect winning.
+        // TODO.
+    }
+
+    fn update_spider(&mut self) {
+        let old_spider_pos = *self.spider_.pos();
+        // TODO: Hack.
+        let new_spider_pos = old_spider_pos.add(self.spider_.get_dir().to_point());
+        let free_polygon = self.field_.free_polygon();
+
+        // TODO: Bridging a length 1 gap.
+        if !free_polygon.is_inside(&old_spider_pos) && free_polygon.is_inside(&new_spider_pos) {
+            self.spider_.start_path();
+        }
+
+        self.spider_.update();
+
+        if free_polygon.is_inside(&old_spider_pos) && !free_polygon.is_inside(&new_spider_pos) {
+            let path = self.spider_.stop_path();
+            if let Some(path) = path {
+                if let Some((poly1, poly2)) = free_polygon.cut(&path) {
+                    let snake_point = self.snake().pos();
+                    if poly1.is_inside(snake_point) {
+                        self.field_.cut(poly1, poly2);
+                    } else {
+                        self.field_.cut(poly2, poly1);
+                    }
+                }
+            }
+        }
     }
 }

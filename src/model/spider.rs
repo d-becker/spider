@@ -30,8 +30,8 @@ impl Spider {
         self.path_ = Some(rectilinear::Path::with_start(*self.pos()));
     }
 
-    pub fn stop_path(&mut self) {
-        self.path_ = None;
+    pub fn stop_path(&mut self) -> Option<rectilinear::Path> {
+        self.path_.take()
     }
 
     pub fn has_path(&self) -> bool {
