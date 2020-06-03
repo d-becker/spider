@@ -1,5 +1,8 @@
 use std::borrow::Borrow;
+use std::cmp::Ordering;
 use std::iter;
+
+use itertools::Itertools;
 
 use super::point::{Direction, Point};
 
@@ -93,6 +96,21 @@ impl<PointT: Borrow<Point>> Line<PointT> {
         let p3 = p.borrow();
 
         vertical_collinear(p1, p2, p3) || horizontal_collinear(p1, p2, p3)
+    }
+
+    // Negative => right.
+    // Positive => left.
+    pub fn point_on_side<PointT2>(&self, point: PointT2) -> i32
+    where
+        PointT2: Borrow<Point>,
+    {
+        // From https://math.stackexchange.com/a/274728 and
+        // https://en.wikipedia.org/wiki/Curve_orientation#Orientation_of_a_simple_polygon.
+        let point = point.borrow();
+        let start = self.start.borrow();
+        let end = self.end.borrow();
+        let d = (point.x - start.x) * (end.y - start.y) - (point.y - start.y) * (end.x - start.x);
+        d.signum()
     }
 
     pub fn contains<PointT2>(&self, p: PointT2) -> bool
@@ -413,19 +431,19 @@ impl Polygon {
         &self.path_
     }
 
-    pub fn vertex_iter_from_ind<'a>(
-        &'a self,
+    pub fn vertex_iter_from_ind(
+        &self,
         start_idx: usize,
-    ) -> impl DoubleEndedIterator<Item = &Point> + 'a {
+    ) -> impl DoubleEndedIterator<Item = &Point> {
         let first_part = self.path().points().iter().skip(start_idx);
         let second_part = self.path().points().iter().take(start_idx);
         first_part.chain(second_part)
     }
 
-    pub fn vertex_iter_from_ind_backwards<'a>(
-        &'a self,
+    pub fn vertex_iter_from_ind_backwards(
+        &self,
         start_idx: usize,
-    ) -> impl DoubleEndedIterator<Item = &Point> + 'a {
+    ) -> impl DoubleEndedIterator<Item = &Point> {
         self.vertex_iter_from_ind(start_idx + 1).rev()
     }
 
@@ -457,6 +475,7 @@ impl Polygon {
     }
 
     pub fn is_inside(&self, point: &Point) -> bool {
+        // Non-zero rule.
         let mut count = 0;
         for line in self.line_iter() {
             if line.contains(point) {
@@ -464,20 +483,82 @@ impl Polygon {
             }
 
             if line.intersects_half_line(point, Direction::RIGHT) {
-                count += 1;
+                count += line.point_on_side(point);
             }
         }
 
-        count % 2 == 1
+        count != 0
+    }
+
+    // TODO: Test.
+    pub fn intersections_with_line<'a, 'b, 'c, PointT, LineT>(
+        &'a self,
+        line: LineT,
+    ) -> impl Iterator<Item = LineIntersection> + 'c
+    where
+        PointT: Borrow<Point>,
+        LineT: Borrow<Line<PointT>> + 'b,
+        'a: 'c,
+        'b: 'c,
+    {
+        self.line_iter()
+            .filter_map(move |polygon_edge| polygon_edge.intersection(line.borrow()))
+            .dedup()
+    }
+
+    // TODO: Test.
+    pub fn intersections_with_path<'a, 'b, 'c>(
+        &'a self,
+        path: &'b Path,
+    ) -> impl Iterator<Item = LineIntersection> + 'c
+    where
+        'a: 'c,
+        'b: 'c,
+    {
+        path.line_iter()
+            .flat_map(move |line| self.intersections_with_line(line))
+            .dedup()
+    }
+
+    // TODO: Test.
+    pub fn intersects_line<PointT>(&self, line: &Line<PointT>) -> bool
+    where
+        PointT: Borrow<Point>,
+    {
+        // Iterator has an element.
+        self.intersections_with_line(line).any(|_| true)
+    }
+
+    // TODO: Test.
+    pub fn intersects_path(&self, path: &Path) -> bool {
+        // Iterator has an element.
+        self.intersections_with_path(path).any(|_| true)
     }
 
     pub fn cut(&self, path: &Path) -> Option<(Polygon, Polygon)> {
-        if !self.check_path_inside(path) {
+        if path.points().len() < 2 || !self.check_path_inside(path) {
             return None;
         }
 
-        let (insertion_start, insertion_end, path_points): (usize, usize, Vec<Point>) =
-            self.cut_path_insertion_and_direction(path)?;
+        let path_start = &path.first()?;
+        let path_end = &path.last()?;
+        let start_insertion_idx = self.insertion_point(path_start)?;
+        let end_insertion_idx = self.insertion_point(path_end)?;
+
+        if path.points().len() == 2
+            && !self.check_two_point_path_line_outside(path, start_insertion_idx)
+        {
+            return None;
+        }
+
+        let (insertion_start, insertion_end, path_points): (usize, usize, Vec<Point>) = self
+            .cut_path_insertion_and_direction(
+                path,
+                path_start,
+                path_end,
+                start_insertion_idx,
+                end_insertion_idx,
+            )?;
 
         let orig_points = self.path().points();
 
@@ -487,7 +568,7 @@ impl Polygon {
             .chain(&orig_points[insertion_end..])
             .map(|&p| p);
         let path1 = Path::with_points(points1).unwrap();
-        let poly1 = Polygon::with_path(path1).unwrap();
+        let poly1 = Polygon::with_path(path1).ok()?; // Error if too few vertices.
 
         let points2 = path_points
             .iter()
@@ -495,16 +576,19 @@ impl Polygon {
             .chain(&orig_points[insertion_start..insertion_end])
             .map(|&p| p);
         let path2 = Path::with_points(points2).unwrap();
-        let poly2 = Polygon::with_path(path2).unwrap();
+        let poly2 = Polygon::with_path(path2).ok()?; // Error if too few vertices.
 
         Some((poly1, poly2))
     }
 
-    fn cut_path_insertion_and_direction(&self, path: &Path) -> Option<(usize, usize, Vec<Point>)> {
-        let path_start = &path.first()?;
-        let path_end = &path.last()?;
-        let start_insertion_idx = self.insertion_point(path_start)?;
-        let end_insertion_idx = self.insertion_point(path_end)?;
+    fn cut_path_insertion_and_direction(
+        &self,
+        path: &Path,
+        path_start: &Point,
+        path_end: &Point,
+        start_insertion_idx: usize,
+        end_insertion_idx: usize,
+    ) -> Option<(usize, usize, Vec<Point>)> {
         let path_points = path.points().to_vec();
 
         let reverse = {
@@ -548,7 +632,6 @@ impl Polygon {
         cut_start: &Point,
         cut_end: &Point,
     ) -> bool {
-        // TODO: Line as an argument?
         let line = Line::from_points(vertex_start, vertex_end).unwrap();
         debug_assert!(line.collinear(cut_start));
         debug_assert!(line.collinear(cut_end));
@@ -562,9 +645,82 @@ impl Polygon {
     }
 
     fn check_path_inside(&self, path: &Path) -> bool {
+        self.check_points_inside(path) && self.check_path_does_not_intersect_polygon(path)
+    }
+
+    fn check_points_inside(&self, path: &Path) -> bool {
         let points = path.points();
         let non_end_points = &points[1..points.len() - 1];
         non_end_points.iter().all(|p| self.is_inside(p))
+    }
+
+    fn check_path_does_not_intersect_polygon(&self, path: &Path) -> bool {
+        // TODO: Use subpath, short-circuit.
+        // We expect two intersections, at the beginning and at the end.
+        self.intersections_with_path(path).collect::<Vec<_>>().len() == 2
+    }
+
+    fn check_two_point_path_line_outside(
+        &self,
+        path: &Path,
+        path_start_insertion_point: usize,
+    ) -> bool {
+        // Check for the case when the path only has a starting point and an endpoint, both on the
+        // polygon's edges, and no other points but the line is outside.
+        // We don't need to check for cases where there are more than two points as
+        // `check_points_inside' and `check_path_does_not_intersect_polygon' cover those cases.
+        debug_assert!(path.points().len() == 2);
+
+        // TODO: Clean up code.
+        let path_end = path.points().last().unwrap();
+        let mut left_or_right = self
+            .line_iter()
+            .nth(path_start_insertion_point - 1)
+            .unwrap()
+            .point_on_side(path_end);
+
+        // We're at a vertex, we need the next edge that is not collinear with the path.
+        if left_or_right == 0 {
+            left_or_right = self
+                .line_iter()
+                .nth(path_start_insertion_point)
+                .unwrap()
+                .point_on_side(path_end);
+        }
+
+        let ok: bool = if self.is_clockwise() {
+            left_or_right == -1
+        } else {
+            left_or_right == 1
+        };
+
+        ok
+    }
+
+    // TODO: This could be cached.
+    fn is_clockwise(&self) -> bool {
+        // Find the top left vertex, it is part of the convex hull.
+        // See https://en.wikipedia.org/wiki/Curve_orientation#Orientation_of_a_simple_polygon.
+        let cmp = |p1: &&Point, p2: &&Point| -> Ordering { p1.x.cmp(&p2.x).then(p1.y.cmp(&p2.y)) };
+
+        let min_ind_pt_opt: Option<(usize, &Point)> = self
+            .vertex_iter_from_ind(0)
+            .enumerate()
+            .min_by(|(_ind1, pt1), (_ind2, pt2)| cmp(pt1, pt2));
+
+        if let Some((ind, pt)) = min_ind_pt_opt {
+            // We can unwrap them because we have always at least four vertices.
+            let pt_before: &Point = self.vertex_iter_from_ind_backwards(ind).nth(1).unwrap();
+            let pt_after: &Point = self.vertex_iter_from_ind(ind).nth(1).unwrap();
+
+            let line = Line::from_points(pt_before, pt).unwrap();
+
+            // Negative determinant means clockwise orientation.
+            line.point_on_side(pt_after) < 0
+        } else {
+            // We have no vertices, that can be regarded as clockwise or anti-clockwise.
+            true
+        }
     }
 }
 

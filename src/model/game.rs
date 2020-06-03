@@ -1,6 +1,5 @@
 use super::field::Field;
 use super::point::Direction;
-use super::point::Point;
 use super::snake::Snake;
 use super::spider::Spider;
 
@@ -87,19 +86,14 @@ impl Game {
     }
 
     fn update_spider(&mut self) {
-        let old_spider_pos = *self.spider_.pos();
-        // TODO: Hack.
-        let new_spider_pos = old_spider_pos.add(self.spider_.get_dir().to_point());
         let free_polygon = self.field_.free_polygon();
-
-        // TODO: Bridging a length 1 gap.
-        if !free_polygon.is_inside(&old_spider_pos) && free_polygon.is_inside(&new_spider_pos) {
+        if !free_polygon.is_inside(self.spider_.pos()) {
             self.spider_.start_path();
         }
 
         self.spider_.update();
 
-        if free_polygon.is_inside(&old_spider_pos) && !free_polygon.is_inside(&new_spider_pos) {
+        if !free_polygon.is_inside(self.spider_.pos()) {
             let path = self.spider_.stop_path();
             if let Some(path) = path {
                 if let Some((poly1, poly2)) = free_polygon.cut(&path) {

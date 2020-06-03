@@ -108,6 +108,28 @@ fn collinear_false_2() {
     assert!(!line.collinear(p3));
 }
 
+fn check_point_on_side(start: &Point, end: &Point, point: &Point, expected: i32) {
+    let line = Line::from_points(start, end).unwrap();
+    assert_eq!(expected, line.point_on_side(point));
+
+    let opposite_line = Line::from_points(end, start).unwrap();
+    assert_eq!(-expected, opposite_line.point_on_side(point));
+}
+
+#[test]
+fn point_on_side() {
+    let point = Point::new(5, 5);
+
+    // Vertical.
+    check_point_on_side(&Point::new(0, 0), &Point::new(0, 4), &point, 1);
+
+    // Horizontal.
+    check_point_on_side(&Point::new(0, 0), &Point::new(4, 0), &point, -1);
+
+    // Collinear.
+    check_point_on_side(&Point::new(5, 0), &Point::new(5, 3), &point, 0);
+}
+
 #[test]
 fn line_contains_inside() {
     let start = Point::new(2, 1);
@@ -884,6 +906,7 @@ fn polygon_inside() {
         Point::new(25, 5),
         Point::new(25, 25),
         Point::new(15, 15),
+        Point::new(20, 15),
     ];
 
     for point in &inside_points {
@@ -897,6 +920,26 @@ fn polygon_inside() {
     for point in &points {
         assert!(!poly.is_inside(point), "Should be outside: {:?}.", point);
     }
+}
+
+#[test]
+fn polygon_inside_outside_but_3_intersections_rightwards() {
+    let points = vec![
+    Point::new(0, 0),
+    Point::new(8, 0),
+    Point::new(8, 4),
+    Point::new(12, 4),
+    Point::new(12, 0),
+    Point::new(50, 0),
+    Point::new(50, 20),
+    Point::new(0, 20)
+    ];
+    let poly_path = Path::with_points(points.iter()).unwrap();
+    let poly = Polygon::with_path(poly_path.clone()).unwrap();
+
+    let point = Point::new(10, 0);
+
+    assert!(!poly.is_inside(&point));
 }
 
 fn polygon_test_cut_path_both_directions(
@@ -1145,6 +1188,62 @@ fn polygon_cut_path_partly_outside() {
 }
 
 #[test]
+fn polygon_cut_path_line_outside_but_no_points() {
+    let points = [
+        Point::new(0, 0),
+        Point::new(20, 0),
+        Point::new(20, 10),
+        Point::new(10, 10),
+        Point::new(10, 20),
+        Point::new(20, 20),
+        Point::new(20, 30),
+        Point::new(0, 30),
+    ];
+    let poly_path = Path::with_points(points.iter()).unwrap();
+    let poly = Polygon::with_path(poly_path).unwrap();
+
+    let cutting_path = Path::with_points(
+        [
+            Point::new(20, 10),
+            Point::new(20, 20),
+        ]
+        .iter(),
+    )
+    .unwrap();
+
+    assert_eq!(None, poly.cut(&cutting_path));
+}
+
+#[test]
+fn polygon_cut_path_line_outside_but_no_points_multiple_lines() {
+    let points = [
+        Point::new(0, 0),
+        Point::new(20, 0),
+        Point::new(20, 10),
+        Point::new(10, 10),
+        Point::new(10, 20),
+        Point::new(20, 20),
+        Point::new(20, 30),
+        Point::new(0, 30),
+    ];
+    let poly_path = Path::with_points(points.iter()).unwrap();
+    let poly = Polygon::with_path(poly_path).unwrap();
+
+    let cutting_path = Path::with_points(
+        [
+            Point::new(20, 5),
+            Point::new(15, 5),
+            Point::new(15, 25),
+            Point::new(20, 25),
+        ]
+        .iter(),
+    )
+    .unwrap();
+
+    assert_eq!(None, poly.cut(&cutting_path));
+}
+
+#[test]
 fn polygon_cut_path_multiple_edge_touches() {
     let points = [
         Point::new(0, 0),
@@ -1169,6 +1268,54 @@ fn polygon_cut_path_multiple_edge_touches() {
         .iter(),
     )
     .unwrap();
+
+    assert_eq!(None, poly.cut(&cutting_path));
+}
+
+#[test]
+fn polygon_cut_path_2_vertex_path_on_edge() {
+    let points = [
+        Point::new(0, 0),
+        Point::new(10, 0),
+        Point::new(10, 10),
+        Point::new(0, 10),
+    ];
+    let poly_path = Path::with_points(points.iter()).unwrap();
+    let poly = Polygon::with_path(poly_path).unwrap();
+
+    let cutting_path = Path::with_points([Point::new(1, 0), Point::new(9, 0)].iter()).unwrap();
+
+    assert_eq!(None, poly.cut(&cutting_path));
+}
+
+#[test]
+fn polygon_cut_path_1_vertex_path() {
+    let points = [
+        Point::new(0, 0),
+        Point::new(10, 0),
+        Point::new(10, 10),
+        Point::new(0, 10),
+    ];
+    let poly_path = Path::with_points(points.iter()).unwrap();
+    let poly = Polygon::with_path(poly_path).unwrap();
+
+    let cutting_path = Path::with_points([Point::new(9, 0)].iter()).unwrap();
+
+    assert_eq!(None, poly.cut(&cutting_path));
+}
+
+#[test]
+fn polygon_cut_path_0_vertex_path() {
+    let points = [
+        Point::new(0, 0),
+        Point::new(10, 0),
+        Point::new(10, 10),
+        Point::new(0, 10),
+    ];
+    let poly_path = Path::with_points(points.iter()).unwrap();
+    let poly = Polygon::with_path(poly_path).unwrap();
+
+    let cutting_path = Path::with_points([].iter()).unwrap();
 
     assert_eq!(None, poly.cut(&cutting_path));
 }
