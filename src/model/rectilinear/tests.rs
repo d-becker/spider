@@ -762,7 +762,7 @@ fn polygon_eq_rotated() {
         let poly = Polygon::with_path(path.clone()).unwrap();
         assert_eq!(poly_orig, poly);
 
-        let reversed_points = points.iter().rev().map(|&p| p).collect::<Vec<Point>>();
+        let reversed_points = points.iter().rev().copied().collect::<Vec<Point>>();
         let path_rev = Path::with_points(reversed_points[..].iter()).unwrap();
         let poly_rev = Polygon::with_path(path_rev.clone()).unwrap();
         assert_eq!(poly_orig, poly_rev);
@@ -810,7 +810,7 @@ fn polygon_iterator() {
     for i in 0..points.len() {
         let collected = poly_orig
             .vertex_iter_from_ind(i)
-            .map(|&p| p)
+            .copied()
             .collect::<Vec<_>>();
         assert_eq!(points, collected);
 
@@ -832,11 +832,11 @@ fn polygon_iterator_rev() {
     let poly_orig = Polygon::with_path(poly_path.clone()).unwrap();
 
     for i in 0..points.len() {
-        let expected = points.iter().rev().map(|&p| p).collect::<Vec<_>>();
+        let expected = points.iter().rev().copied().collect::<Vec<_>>();
         let collected = poly_orig
             .vertex_iter_from_ind(i)
             .rev()
-            .map(|&p| p)
+            .copied()
             .collect::<Vec<_>>();
         assert_eq!(expected, collected, "{:?}", i);
 
@@ -965,7 +965,7 @@ fn polygon_test_cut_path_both_directions(
 
     {
         let cut_path_reversed =
-            Path::with_points(cut_path.points().iter().rev().map(|&p| p)).unwrap();
+            Path::with_points(cut_path.points().iter().rev().copied()).unwrap();
         let (poly1, poly2) = orig.cut(&cut_path_reversed).unwrap();
         let res = (&poly1, &poly2);
         assert!(res == (&expected1, &expected2) || res == (&expected2, &expected2));

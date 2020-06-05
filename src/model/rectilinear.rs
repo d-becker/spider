@@ -1,3 +1,5 @@
+mod line;
+
 use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::iter;
@@ -5,6 +7,7 @@ use std::iter;
 use itertools::Itertools;
 
 use super::point::{Direction, Point};
+pub use line::{Line, LineIntersection};
 
 pub fn horizontal(p1: &Point, p2: &Point) -> bool {
     p1.y == p2.y
@@ -23,205 +26,6 @@ where
     let p2 = p2.borrow();
 
     horizontal(p1, p2) || vertical(p1, p2)
-}
-
-#[derive(Debug, Eq, PartialEq)]
-pub struct Line<PointT>
-where
-    PointT: Borrow<Point>,
-{
-    start: PointT,
-    end: PointT,
-}
-
-#[derive(Debug, Eq, PartialEq)]
-pub enum LineIntersection {
-    Line(Line<Point>),
-    Point(Point),
-}
-
-impl<PointT: Borrow<Point>> Line<PointT> {
-    pub fn from_points(start: PointT, end: PointT) -> Option<Line<PointT>> {
-        if rectilinear(start.borrow(), end.borrow()) {
-            Some(Line { start, end })
-        } else {
-            None
-        }
-    }
-
-    pub fn start(&self) -> &PointT {
-        &self.start
-    }
-
-    pub fn end(&self) -> &PointT {
-        &self.end
-    }
-
-    pub fn vertical(&self) -> bool {
-        self.start.borrow().x == self.end.borrow().x
-    }
-
-    pub fn horizontal(&self) -> bool {
-        self.start.borrow().y == self.end.borrow().y
-    }
-
-    pub fn direction(&self) -> Direction {
-        let diff = self.end.borrow().subtract(self.start.borrow());
-
-        if diff.x == 0 {
-            if diff.y > 0 {
-                Direction::DOWN
-            } else if diff.y < 0 {
-                Direction::UP
-            } else {
-                Direction::NONE
-            }
-        } else {
-            debug_assert!(diff.y == 0);
-            if diff.x > 0 {
-                Direction::RIGHT
-            } else {
-                debug_assert!(diff.x < 0);
-                Direction::LEFT
-            }
-        }
-    }
-
-    pub fn collinear<PointT2>(&self, p: PointT2) -> bool
-    where
-        PointT2: Borrow<Point>,
-    {
-        let p1 = self.start().borrow();
-        let p2 = self.end().borrow();
-        let p3 = p.borrow();
-
-        vertical_collinear(p1, p2, p3) || horizontal_collinear(p1, p2, p3)
-    }
-
-    // Negative => right.
-    // Positive => left.
-    pub fn point_on_side<PointT2>(&self, point: PointT2) -> i32
-    where
-        PointT2: Borrow<Point>,
-    {
-        // From https://math.stackexchange.com/a/274728 and
-        // https://en.wikipedia.org/wiki/Curve_orientation#Orientation_of_a_simple_polygon.
-        let point = point.borrow();
-        let start = self.start.borrow();
-        let end = self.end.borrow();
-        let d = (point.x - start.x) * (end.y - start.y) - (point.y - start.y) * (end.x - start.x);
-        d.signum()
-    }
-
-    pub fn contains<PointT2>(&self, p: PointT2) -> bool
-    where
-        PointT2: Borrow<Point>,
-    {
-        let start = self.start().borrow();
-        let end = self.end().borrow();
-        let p = p.borrow();
-
-        if vertical_collinear(start, end, p) {
-            (start.y <= p.y && p.y <= end.y) || (end.y <= p.y && p.y <= start.y)
-        } else if horizontal_collinear(start, end, p) {
-            (start.x <= p.x && p.x <= end.x) || (end.x <= p.x && p.x <= start.x)
-        } else {
-            false
-        }
-    }
-
-    pub fn intersects<PointT2>(&self, other: &Line<PointT2>) -> bool
-    where
-        PointT2: Borrow<Point>,
-    {
-        self.intersection(other).is_some()
-    }
-
-    pub fn intersection<PointT2>(&self, other: &Line<PointT2>) -> Option<LineIntersection>
-    where
-        PointT2: Borrow<Point>,
-    {
-        let l1_h = [self.start().borrow().x, self.end().borrow().x];
-        let l2_h = [other.start().borrow().x, other.end().borrow().x];
-
-        let l1_v = [self.start().borrow().y, self.end().borrow().y];
-        let l2_v = [other.start().borrow().y, other.end().borrow().y];
-
-        let horiz_overlap = intervals_overlap(l1_h, l2_h)?;
-        let vertical_overlap = intervals_overlap(l1_v, l2_v)?;
-
-        let horiz_is_point = horiz_overlap.0 == horiz_overlap.1;
-        let vert_is_point = vertical_overlap.0 == vertical_overlap.1;
-
-        if horiz_is_point && vert_is_point {
-            Some(LineIntersection::Point(Point::new(
-                horiz_overlap.0,
-                vertical_overlap.0,
-            )))
-        } else if horiz_is_point {
-            debug_assert!(!vert_is_point);
-            let x = horiz_overlap.0;
-            let p1 = Point::new(x, vertical_overlap.0);
-            let p2 = Point::new(x, vertical_overlap.1);
-            Some(LineIntersection::Line(Line::from_points(p1, p2).unwrap()))
-        } else {
-            // The intersection of lines cannot be 2 dimensional.
-            debug_assert!(vert_is_point);
-            let y = vertical_overlap.0;
-            let p1 = Point::new(horiz_overlap.0, y);
-            let p2 = Point::new(horiz_overlap.1, y);
-            Some(LineIntersection::Line(Line::from_points(p1, p2).unwrap()))
-        }
-    }
-
-    pub fn intersects_half_line(&self, half_line_point: &Point, half_line_dir: Direction) -> bool {
-        self.intersection_with_half_line(half_line_point, half_line_dir)
-            .is_some()
-    }
-
-    pub fn intersection_with_half_line(
-        &self,
-        half_line_point: &Point,
-        half_line_dir: Direction,
-    ) -> Option<LineIntersection> {
-        // TODO: Better solution?
-        let half_line_end = {
-            let mut pt = *half_line_point;
-            match half_line_dir {
-                Direction::UP => pt.y = i32::MIN,
-                Direction::DOWN => pt.y = i32::MAX,
-                Direction::LEFT => pt.x = i32::MIN,
-                Direction::RIGHT => pt.x = i32::MAX,
-                Direction::NONE => {}
-            };
-            pt
-        };
-
-        let half_line = Line::from_points(half_line_point, &half_line_end).unwrap();
-        self.intersection(&half_line)
-    }
-}
-
-fn intervals_overlap(mut int1: [i32; 2], mut int2: [i32; 2]) -> Option<(i32, i32)> {
-    int1.sort();
-    int2.sort();
-
-    let larger_start = i32::max(int1[0], int2[0]);
-    let smaller_end = i32::min(int1[1], int2[1]);
-
-    if larger_start <= smaller_end {
-        Some((larger_start, smaller_end))
-    } else {
-        None
-    }
-}
-
-fn vertical_collinear(p1: &Point, p2: &Point, p3: &Point) -> bool {
-    p1.x == p2.x && p2.x == p3.x
-}
-
-fn horizontal_collinear(p1: &Point, p2: &Point, p3: &Point) -> bool {
-    p1.y == p2.y && p2.y == p3.y
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -268,7 +72,7 @@ impl Path {
         &self.points_
     }
 
-    pub fn line_iter(&self) -> impl DoubleEndedIterator<Item = Line<&Point>> {
+    pub fn line_iter(&self) -> impl DoubleEndedIterator<Item = Line<&Point>> + Clone + ExactSizeIterator {
         self.points()
             .iter()
             .zip(self.points().iter().skip(1))
@@ -447,7 +251,7 @@ impl Polygon {
         self.vertex_iter_from_ind(start_idx + 1).rev()
     }
 
-    pub fn line_iter(&self) -> impl Iterator<Item = Line<&Point>> {
+    pub fn line_iter(&self) -> impl Iterator<Item = Line<&Point>> + Clone {
         let last = self.path().last().unwrap();
         let first = self.path().first().unwrap();
         let last_line = Line::<&Point>::from_points(last, first).unwrap();
@@ -496,14 +300,15 @@ impl Polygon {
         line: LineT,
     ) -> impl Iterator<Item = LineIntersection> + 'c
     where
-        PointT: Borrow<Point>,
+        PointT: Borrow<Point> + 'b,
         LineT: Borrow<Line<PointT>> + 'b,
         'a: 'c,
         'b: 'c,
     {
-        self.line_iter()
-            .filter_map(move |polygon_edge| polygon_edge.intersection(line.borrow()))
-            .dedup()
+        // self.line_iter()
+        //     .filter_map(move |polygon_edge| polygon_edge.intersection(line.borrow()))
+        //     .dedup()
+        line::intersections_line_iters(self.line_iter(), std::iter::once(line))
     }
 
     // TODO: Test.
@@ -515,9 +320,10 @@ impl Polygon {
         'a: 'c,
         'b: 'c,
     {
-        path.line_iter()
-            .flat_map(move |line| self.intersections_with_line(line))
-            .dedup()
+        // path.line_iter()
+        //     .flat_map(move |line| self.intersections_with_line(line))
+        //     .dedup()
+        line::intersections_line_iters(self.line_iter(), path.line_iter())
     }
 
     // TODO: Test.
@@ -566,7 +372,7 @@ impl Polygon {
             .iter()
             .chain(&path_points)
             .chain(&orig_points[insertion_end..])
-            .map(|&p| p);
+            .copied();
         let path1 = Path::with_points(points1).unwrap();
         let poly1 = Polygon::with_path(path1).ok()?; // Error if too few vertices.
 
@@ -574,7 +380,7 @@ impl Polygon {
             .iter()
             .rev()
             .chain(&orig_points[insertion_start..insertion_end])
-            .map(|&p| p);
+            .copied();
         let path2 = Path::with_points(points2).unwrap();
         let poly2 = Polygon::with_path(path2).ok()?; // Error if too few vertices.
 
@@ -621,7 +427,7 @@ impl Polygon {
             Some((
                 end_insertion_idx,
                 start_insertion_idx,
-                path_points.iter().rev().map(|&p| p).collect(),
+                path_points.iter().rev().copied().collect(),
             ))
         }
     }
@@ -655,9 +461,15 @@ impl Polygon {
     }
 
     fn check_path_does_not_intersect_polygon(&self, path: &Path) -> bool {
-        // TODO: Use subpath, short-circuit.
         // We expect two intersections, at the beginning and at the end.
-        self.intersections_with_path(path).collect::<Vec<_>>().len() == 2
+        // self.intersections_with_path(path).collect::<Vec<_>>().len() == 2
+        // TODO: Implement a skip last iterator adaptor?
+        let path_lines = path.points().len() - 1;
+        // let inner_path = path.line_iter().take(path_lines - 1).skip(1);
+        let inner_path = path.line_iter().rev().skip(1).rev().skip(1);
+        let intersection_found =
+            line::intersections_line_iters(self.line_iter(), inner_path).any(|_| true);
+        !intersection_found
     }
 
     fn check_two_point_path_line_outside(

@@ -1,6 +1,5 @@
 use super::*;
 
-
 #[cfg(test)]
 mod spider {
     use super::*;
@@ -52,7 +51,7 @@ mod spider {
         spider.set_dir(dir);
 
         let mut old_points = spider.get_points().to_vec();
-        let last = old_points.last().map(|&p| p).unwrap_or(Point::origin());
+        let last = old_points.last().copied().unwrap_or(Point::origin());
         old_points.push(last.add(dir.to_point()));
         let exp = old_points;
 
