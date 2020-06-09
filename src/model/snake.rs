@@ -1,3 +1,5 @@
+use rand::seq::SliceRandom;
+
 use super::field::Field;
 use super::point::{Direction, Point};
 use super::spider::Spider;
@@ -14,7 +16,9 @@ impl Snake {
 
     pub fn next_step(&self, field: &Field, spider: &Spider) -> Direction {
         // TODO: Implement it.
-        Direction::NONE
+        let mut rng = rand::thread_rng();
+        let directions = [Direction::UP, Direction::LEFT, Direction::DOWN, Direction::RIGHT, Direction::NONE];
+        *directions.choose(&mut rng).unwrap()
     }
 
     pub fn pos(&self) -> &Point {

@@ -64,25 +64,25 @@ impl Game {
             return;
         }
         // Update the snake position.
-        // TODO.
-        self.snake_.set_pos(
-            self.snake_.pos().add(
-                self.snake_
-                    .next_step(&self.field_, &self.spider_)
-                    .to_point(),
-            ),
-        );
+        self.update_snake();
 
         // Detect spider starting or ending path.
         self.update_spider();
 
         // Detect snake eating spider.
         if self.spider().pos() == self.snake().pos() {
-            self.game_over_ = true;
+            self.handle_spider_eaten();
+            return;
         }
 
         // Detect winning.
         // TODO.
+    }
+
+    fn update_snake(&mut self) {
+        let dir = self.snake_.next_step(&self.field_, &self.spider_);
+        let new_pos = self.snake_.pos().add(dir.to_point());
+        self.snake_.set_pos(new_pos);
     }
 
     fn update_spider(&mut self) {
@@ -106,5 +106,10 @@ impl Game {
                 }
             }
         }
+    }
+
+    fn handle_spider_eaten(&mut self) {
+        self.game_over_ = true;
+        println!("Game over.");
     }
 }

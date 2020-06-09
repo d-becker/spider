@@ -8,8 +8,6 @@ use gtk::prelude::*;
 use spider_core;
 use spider_core::gui::{self, SpiderGui};
 
-use spider_core::ImmutableRcWrapper;
-
 use spider_core::model::point::{Direction, Point};
 use spider_core::model::field::Field;
 use spider_core::model::snake::Snake;
@@ -42,7 +40,7 @@ fn main() {
     let game_rc = Rc::new(RefCell::new(game));
 
     gtk::init().unwrap();
-    gtk::timeout_add_seconds(1, clone!(@strong game_rc => move || {
+    gtk::timeout_add(500, clone!(@strong game_rc => move || {
         game_rc.borrow_mut().update_state();
         Continue(true)
     }));

@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct Point {
     pub x: i32,
     pub y: i32,

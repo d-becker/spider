@@ -164,7 +164,6 @@ impl<PointT: Borrow<Point>> Line<PointT> {
         half_line_point: &Point,
         half_line_dir: Direction,
     ) -> Option<LineIntersection> {
-        // TODO: Better solution?
         let half_line_end = {
             let mut pt = *half_line_point;
             match half_line_dir {
@@ -225,22 +224,5 @@ fn horizontal_collinear(p1: &Point, p2: &Point, p3: &Point) -> bool {
     p1.y == p2.y && p2.y == p3.y
 }
 
-// TODO: Move it somewhere else.
-pub struct SkipLast<I>
-where
-    I : Iterator
-{
-    iter_: std::iter::Peekable<I>,
-}
-
-impl<I> Iterator for SkipLast<I>
-where
-    I: Iterator,
-{
-    type Item = I::Item;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter_.peek()?;
-        self.next()
-    }
-}
+#[cfg(test)]
+mod tests;

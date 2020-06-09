@@ -56,7 +56,7 @@ impl SpiderGui {
         window.add(&drawing_area);
 
         // TODO: Make the refresh rate a parameter.
-        gtk::timeout_add_seconds(1, move || {
+        gtk::timeout_add(500, move || {
             let width = drawing_area.get_allocated_width();
             let height = drawing_area.get_allocated_height();
             drawing_area.clone().queue_draw_area(0, 0, width, height);

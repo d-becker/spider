@@ -6,6 +6,8 @@ use std::iter;
 
 use itertools::Itertools;
 
+use crate::iter::skip_last::SkipLastIterator;
+
 use super::point::{Direction, Point};
 pub use line::{Line, LineIntersection};
 
@@ -72,7 +74,9 @@ impl Path {
         &self.points_
     }
 
-    pub fn line_iter(&self) -> impl DoubleEndedIterator<Item = Line<&Point>> + Clone + ExactSizeIterator {
+    pub fn line_iter(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = Line<&Point>> + Clone + ExactSizeIterator {
         self.points()
             .iter()
             .zip(self.points().iter().skip(1))
@@ -122,8 +126,7 @@ impl Path {
 
         // We do not need the last line segment, that is always connected at the end and if
         // there are further connections, it is handled in 'handle_loop'.
-        let num_of_lines = self.points().len() - 1;
-        for line in self.line_iter().take(num_of_lines.saturating_sub(1)) {
+        for line in self.line_iter().skip_last() {
             let intersection = line.intersection(&new_line);
             if let Some(int) = intersection {
                 match int {
@@ -215,11 +218,10 @@ impl Polygon {
                 // The first and the last line segments in the path always intersect last_line at
                 // the end vertices, therefore they are filtered out. The other line segments
                 // should not, otherwise the polygon is self-intersecting.
-                let num_line_segments = path.points().len() - 1;
                 let intersecting_lines = path
                     .line_iter()
-                    .take(num_line_segments - 1) // Filter out the last line segment.
                     .skip(1) // Filter out the first line segment.
+                    .skip_last() // Filter out the last line segment.
                     .any(|line| line.intersects(&last_line));
 
                 if intersecting_lines {
@@ -280,21 +282,62 @@ impl Polygon {
 
     pub fn is_inside(&self, point: &Point) -> bool {
         // Non-zero rule.
-        let mut count = 0;
-        for line in self.line_iter() {
-            if line.contains(point) {
-                return false;
-            }
+        // TODO: More readable.
+        // let mut num_intersections = 0;
+        // let mut count = 0;
+        // let mut last_non_zero = 0;
+        // let mut first_non_zero = 0;
+        // for line in self.line_iter() {
+        //     if line.contains(point) {
+        //         return false;
+        //     }
 
-            if line.intersects_half_line(point, Direction::RIGHT) {
-                count += line.point_on_side(point);
-            }
-        }
+        //     if line.intersects_half_line(point, Direction::RIGHT) {
+        //         num_intersections += 1;
+        //         let value = line.point_on_side(point);
+
+        //         if first_non_zero == 0 {
+        //             first_non_zero = value;
+        //         }
+
+        //         if value != last_non_zero {
+        //             count += value;
+        //             last_non_zero = value;
+        //         }
+        //     }
+        // }
+
+        // if first_non_zero == last_non_zero && num_intersections > 1 {
+        //     count -= first_non_zero;
+        // }
+
+        // count != 0
+
+        // We select the lines that intersect the half line cast from the point.
+        // We filter out lines parallel to the half line as their value is 0 AND they may separate
+        // lines that point in the same direction, which should not be counted separately in this
+        // case. This is why we deduplicate the iterator.
+        let mut intersecting_perpendicular_lines = self
+            .line_iter()
+            .filter(|line| !line.contains(point))
+            .filter(|line| line.intersects_half_line(point, Direction::RIGHT))
+            .map(|line| line.point_on_side(point))
+            .filter(|side| *side != 0)
+            .dedup();
+
+        // We still have to take care of the first
+        // and last line being duplicates, but only is they are in fact two different lines (the
+        // length of the iterator is not one).
+        // We solve this by putting the first element to the end and deduplicating again.
+        let first: Option<i32> = intersecting_perpendicular_lines.nth(0);
+        let count: i32 = intersecting_perpendicular_lines
+            .chain(first.into_iter())
+            .dedup()
+            .sum();
 
         count != 0
     }
 
-    // TODO: Test.
     pub fn intersections_with_line<'a, 'b, 'c, PointT, LineT>(
         &'a self,
         line: LineT,
@@ -305,13 +348,9 @@ impl Polygon {
         'a: 'c,
         'b: 'c,
     {
-        // self.line_iter()
-        //     .filter_map(move |polygon_edge| polygon_edge.intersection(line.borrow()))
-        //     .dedup()
         line::intersections_line_iters(self.line_iter(), std::iter::once(line))
     }
 
-    // TODO: Test.
     pub fn intersections_with_path<'a, 'b, 'c>(
         &'a self,
         path: &'b Path,
@@ -320,13 +359,9 @@ impl Polygon {
         'a: 'c,
         'b: 'c,
     {
-        // path.line_iter()
-        //     .flat_map(move |line| self.intersections_with_line(line))
-        //     .dedup()
         line::intersections_line_iters(self.line_iter(), path.line_iter())
     }
 
-    // TODO: Test.
     pub fn intersects_line<PointT>(&self, line: &Line<PointT>) -> bool
     where
         PointT: Borrow<Point>,
@@ -335,7 +370,6 @@ impl Polygon {
         self.intersections_with_line(line).any(|_| true)
     }
 
-    // TODO: Test.
     pub fn intersects_path(&self, path: &Path) -> bool {
         // Iterator has an element.
         self.intersections_with_path(path).any(|_| true)
@@ -462,11 +496,7 @@ impl Polygon {
 
     fn check_path_does_not_intersect_polygon(&self, path: &Path) -> bool {
         // We expect two intersections, at the beginning and at the end.
-        // self.intersections_with_path(path).collect::<Vec<_>>().len() == 2
-        // TODO: Implement a skip last iterator adaptor?
-        let path_lines = path.points().len() - 1;
-        // let inner_path = path.line_iter().take(path_lines - 1).skip(1);
-        let inner_path = path.line_iter().rev().skip(1).rev().skip(1);
+        let inner_path = path.line_iter().skip(1).skip_last();
         let intersection_found =
             line::intersections_line_iters(self.line_iter(), inner_path).any(|_| true);
         !intersection_found
@@ -483,7 +513,6 @@ impl Polygon {
         // `check_points_inside' and `check_path_does_not_intersect_polygon' cover those cases.
         debug_assert!(path.points().len() == 2);
 
-        // TODO: Clean up code.
         let path_end = path.points().last().unwrap();
         let mut left_or_right = self
             .line_iter()
@@ -500,10 +529,12 @@ impl Polygon {
                 .point_on_side(path_end);
         }
 
+        let right = -1;
+        let left = 1;
         let ok: bool = if self.is_clockwise() {
-            left_or_right == -1
+            left_or_right == right
         } else {
-            left_or_right == 1
+            left_or_right == left
         };
 
         ok
@@ -568,9 +599,7 @@ fn is_eq_forward(vertices1: &[Point], vertices2: &[Point], offset: usize) -> boo
     debug_assert_eq!(vertices1.len(), vertices2.len());
 
     let other_iter = vertices2.iter().cycle().skip(offset).take(vertices2.len());
-    let mut vertex_pairs = vertices1.iter().zip(other_iter);
-
-    vertex_pairs.all(|(v1, v2)| v1 == v2)
+    vertices1.iter().eq(other_iter)
 }
 
 fn is_eq_backward(vertices1: &[Point], vertices2: &[Point], offset: usize) -> bool {
@@ -582,10 +611,12 @@ fn is_eq_backward(vertices1: &[Point], vertices2: &[Point], offset: usize) -> bo
         .cycle()
         .skip(vertices2.len() - offset - 1)
         .take(vertices2.len());
-    let mut vertex_pairs = vertices1.iter().zip(other_iter);
 
-    vertex_pairs.all(|(v1, v2)| v1 == v2)
+    vertices1.iter().eq(other_iter)
 }
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod tests_fractal_polygon_inside;
