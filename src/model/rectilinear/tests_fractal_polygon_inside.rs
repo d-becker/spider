@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::collections::VecDeque;
+use std::time::{Duration, Instant};
 
 use itertools::Itertools;
 
@@ -5091,14 +5092,18 @@ fn centre_in_fractal() {
     assert!(polygon.is_inside(&centre));
 }
 
-fn check_points<P1, P2, P3, It1, It2, It3>(polygon: &Polygon, outside_points: It1, boundary_points: It2, inside_points: It3)
-    where
-        P1: Borrow<Point>,
-        P2: Borrow<Point>,
-        P3: Borrow<Point>,
-        It1: Iterator<Item=P1>,
-        It2: Iterator<Item=P2>,
-        It3: Iterator<Item=P3>,
+fn check_points<P1, P2, P3, It1, It2, It3>(
+    polygon: &Polygon,
+    outside_points: It1,
+    boundary_points: It2,
+    inside_points: It3,
+) where
+    P1: Borrow<Point>,
+    P2: Borrow<Point>,
+    P3: Borrow<Point>,
+    It1: Iterator<Item = P1>,
+    It2: Iterator<Item = P2>,
+    It3: Iterator<Item = P3>,
 {
     for point in outside_points {
         assert!(!polygon.is_inside(point.borrow()), "{:?}", point.borrow());
@@ -5114,17 +5119,46 @@ fn check_points<P1, P2, P3, It1, It2, It3>(polygon: &Polygon, outside_points: It
 }
 
 #[test]
-fn test_all_points() {
+fn temp_test() {
     let (polygon, (max_x, max_y)) = get_fractal_polygon(2);
+    let point = Point::new(5, 243);
+    assert!(polygon.is_inside(&point));
+}
+
+#[test]
+fn test_all_points() {
+    let beginning = Instant::now();
+
+    let (polygon, (max_x, max_y)) = get_fractal_polygon(2);
+
+    let polygon_ready = Instant::now();
+    eprintln!("Polygon ready after:\t{} ms.", polygon_ready.duration_since(beginning).as_millis());
+
     let (matrix, boundary) = get_matrix_with_boundary(&polygon, max_x as usize, max_y as usize);
+    let matrix_ready = Instant::now();
+    eprintln!("Matrix ready after:\t{} ms.", matrix_ready.duration_since(beginning).as_millis());
 
     let centre = Point::new(max_x / 2, max_y / 2);
     let inside_points = flood_fill(&matrix, centre);
 
-    let all_points = (0..max_x).cartesian_product(0..max_y).map(|(x, y)| Point::new(x, y));
+    let all_points = (0..max_x)
+        .cartesian_product(0..max_y)
+        .map(|(x, y)| Point::new(x, y));
     assert_eq!(max_x * max_y, all_points.clone().count() as i32);
 
-    let outside_points = all_points.filter(|point| !boundary.contains(point) && !inside_points.contains(point));
+    let outside_points =
+        all_points.filter(|point| !boundary.contains(point) && !inside_points.contains(point));
 
-    check_points(&polygon, outside_points, boundary.iter(), inside_points.iter());
+
+    let to_check_points = Instant::now();
+    eprintln!("Starting to check points after:\t{} ms.", to_check_points.duration_since(beginning).as_millis());
+    check_points(
+        &polygon,
+        outside_points,
+        boundary.iter(),
+        inside_points.iter(),
+    );
+
+    let finished = Instant::now();
+    eprintln!("Finished after:\t{} ms.", finished.duration_since(beginning).as_millis());
 }

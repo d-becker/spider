@@ -2,6 +2,7 @@ mod line;
 
 use std::borrow::Borrow;
 use std::cmp::Ordering;
+use std::collections::VecDeque;
 use std::iter;
 
 use itertools::Itertools;
@@ -282,60 +283,84 @@ impl Polygon {
 
     pub fn is_inside(&self, point: &Point) -> bool {
         // Non-zero rule.
-        // TODO: More readable.
-        // let mut num_intersections = 0;
-        // let mut count = 0;
-        // let mut last_non_zero = 0;
-        // let mut first_non_zero = 0;
-        // for line in self.line_iter() {
-        //     if line.contains(point) {
-        //         return false;
-        //     }
+        // First we need to return false if the point is on an edge. We use
+        // `itertools::process_results` to short-circuit.
+        let not_on_edge = self.line_iter().map(|line| {
+            if !line.contains(point) {
+                Ok(line)
+            } else {
+                Err(())
+            }
+        });
 
-        //     if line.intersects_half_line(point, Direction::RIGHT) {
-        //         num_intersections += 1;
-        //         let value = line.point_on_side(point);
+        let sum_result: Result<i32, ()> = itertools::process_results(not_on_edge, |iter| {
+            // We select the lines that intersect the half line cast from the point.
+            let intersecting_perpendicular_lines = iter
+                .filter(|line| line.intersects_half_line(point, Direction::RIGHT))
+                .map(|line| line.point_on_side(point));
 
-        //         if first_non_zero == 0 {
-        //             first_non_zero = value;
-        //         }
+            // We reduce sequences of [1, 0, 1] to 1 and sequences of [-1, 0, -1] to -1. These
+            // occur when the half line intersects two lines in the same direction connected by a
+            // line that is perpendicular to the half line. In this case counting the lines
+            // separately would give incorrect results.
+            let mut lookahead = VecDeque::with_capacity(3);
+            let mut iterator_exhausted = false;
+            let filtered = intersecting_perpendicular_lines.batching(|it| {
+                // Get the next group of three if possible.
+                while lookahead.len() < 3  && !iterator_exhausted {
+                    if let Some(value) = it.next() {
+                        lookahead.push_back(value);
+                    } else {
+                        iterator_exhausted = true;
+                    }
+                }
 
-        //         if value != last_non_zero {
-        //             count += value;
-        //             last_non_zero = value;
-        //         }
-        //     }
-        // }
+                // If we do not have three elements, we are at the end and return everything.
+                // TODO: Optimise to return all.
+                if lookahead.len() < 3 {
+                    return lookahead.pop_front();
+                }
 
-        // if first_non_zero == last_non_zero && num_intersections > 1 {
-        //     count -= first_non_zero;
-        // }
+                let first = lookahead[0];
+                if lookahead[1] == 0 && lookahead[0] == lookahead[2] {
+                    lookahead.clear();
+                } else {
+                    lookahead.pop_front();
+                }
 
-        // count != 0
+                Some(first)
+            });
 
-        // We select the lines that intersect the half line cast from the point.
-        // We filter out lines parallel to the half line as their value is 0 AND they may separate
-        // lines that point in the same direction, which should not be counted separately in this
-        // case. This is why we deduplicate the iterator.
-        let mut intersecting_perpendicular_lines = self
-            .line_iter()
-            .filter(|line| !line.contains(point))
-            .filter(|line| line.intersects_half_line(point, Direction::RIGHT))
-            .map(|line| line.point_on_side(point))
-            .filter(|side| *side != 0)
-            .dedup();
+            // TODO: Use iterators.
+            let values = filtered.collect::<Vec<_>>();
+            let sum: i32 = values.iter().sum();
 
-        // We still have to take care of the first
-        // and last line being duplicates, but only is they are in fact two different lines (the
-        // length of the iterator is not one).
-        // We solve this by putting the first element to the end and deduplicating again.
-        let first: Option<i32> = intersecting_perpendicular_lines.nth(0);
-        let count: i32 = intersecting_perpendicular_lines
-            .chain(first.into_iter())
-            .dedup()
-            .sum();
+            // Check wrapping. At most one or two elements of a sequence wrap around to the stast,
+            // and at most two are at the end. Of course, it is either 1+2 or 2_1 (or none). We put
+            // the first two elements after the last two an check if there is a sequence. It
+            // shouldn't matter if we duplicate some elements (for example if there are three
+            // elements).
+            let end_idx = 2.min(values.len());
+            let first_two = &values[0..end_idx];
 
-        count != 0
+            let start_idx = if values.len() > 2 { values.len() - 1} else { 0 };
+            let last_two = &values[start_idx..];
+
+            let together: Vec<i32> = last_two.iter().chain(first_two).copied().collect();
+
+            let to_subtract = match &together[..] {
+                &[v, 0, w, ..]  | &[.., v, 0, w] if v == w => v,
+                _ => 0,
+            };
+
+            sum - to_subtract
+        });
+
+        if let Ok(sum) = sum_result {
+            sum != 0
+        } else {
+            false
+        }
     }
 
     pub fn intersections_with_line<'a, 'b, 'c, PointT, LineT>(
