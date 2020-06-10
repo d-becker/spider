@@ -5119,14 +5119,8 @@ fn check_points<P1, P2, P3, It1, It2, It3>(
 }
 
 #[test]
-fn temp_test() {
-    let (polygon, (max_x, max_y)) = get_fractal_polygon(2);
-    let point = Point::new(5, 243);
-    assert!(polygon.is_inside(&point));
-}
-
-#[test]
 fn test_all_points() {
+    // TODO: Readability.
     let beginning = Instant::now();
 
     let (polygon, (max_x, max_y)) = get_fractal_polygon(2);

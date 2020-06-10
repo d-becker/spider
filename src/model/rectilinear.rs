@@ -295,61 +295,34 @@ impl Polygon {
 
         let sum_result: Result<i32, ()> = itertools::process_results(not_on_edge, |iter| {
             // We select the lines that intersect the half line cast from the point.
-            let intersecting_perpendicular_lines = iter
+            let intersecting_line_sides = iter
                 .filter(|line| line.intersects_half_line(point, Direction::RIGHT))
                 .map(|line| line.point_on_side(point));
 
-            // We reduce sequences of [1, 0, 1] to 1 and sequences of [-1, 0, -1] to -1. These
-            // occur when the half line intersects two lines in the same direction connected by a
-            // line that is perpendicular to the half line. In this case counting the lines
-            // separately would give incorrect results.
-            let mut lookahead = VecDeque::with_capacity(3);
-            let mut iterator_exhausted = false;
-            let filtered = intersecting_perpendicular_lines.batching(|it| {
-                // Get the next group of three if possible.
-                while lookahead.len() < 3  && !iterator_exhausted {
-                    if let Some(value) = it.next() {
-                        lookahead.push_back(value);
-                    } else {
-                        iterator_exhausted = true;
-                    }
-                }
-
-                // If we do not have three elements, we are at the end and return everything.
-                // TODO: Optimise to return all.
-                if lookahead.len() < 3 {
-                    return lookahead.pop_front();
-                }
-
-                let first = lookahead[0];
-                if lookahead[1] == 0 && lookahead[0] == lookahead[2] {
-                    lookahead.clear();
-                } else {
-                    lookahead.pop_front();
-                }
-
-                Some(first)
-            });
+            let reduced = Self::reduce_sequences(intersecting_line_sides);
 
             // TODO: Use iterators.
-            let values = filtered.collect::<Vec<_>>();
+            let values = reduced.collect::<Vec<_>>();
             let sum: i32 = values.iter().sum();
 
-            // Check wrapping. At most one or two elements of a sequence wrap around to the stast,
-            // and at most two are at the end. Of course, it is either 1+2 or 2_1 (or none). We put
-            // the first two elements after the last two an check if there is a sequence. It
-            // shouldn't matter if we duplicate some elements (for example if there are three
-            // elements).
+            // Check wrapping. At most two elements of a sequence wrap around to the start, and at
+            // most two are at the end. Of course, it is either 1+2 or 2+1 (or none). We put the
+            // first two elements after the last two an check if there is a sequence. It shouldn't
+            // matter if we duplicate some elements (for example if there are three elements).
             let end_idx = 2.min(values.len());
             let first_two = &values[0..end_idx];
 
-            let start_idx = if values.len() > 2 { values.len() - 1} else { 0 };
+            let start_idx = if values.len() > 2 {
+                values.len() - 1
+            } else {
+                0
+            };
             let last_two = &values[start_idx..];
 
             let together: Vec<i32> = last_two.iter().chain(first_two).copied().collect();
 
             let to_subtract = match &together[..] {
-                &[v, 0, w, ..]  | &[.., v, 0, w] if v == w => v,
+                &[v, 0, w, ..] | &[.., v, 0, w] if v == w => v,
                 _ => 0,
             };
 
@@ -444,6 +417,43 @@ impl Polygon {
         let poly2 = Polygon::with_path(path2).ok()?; // Error if too few vertices.
 
         Some((poly1, poly2))
+    }
+
+    fn reduce_sequences<I: Iterator<Item = i32>>(iter: I) -> impl Iterator<Item = i32> {
+        // We reduce sequences of [1, 0, 1] to 1 and sequences of [-1, 0, -1] to -1. These
+        // occur when the half line intersects two lines in the same direction connected by a
+        // line that is perpendicular to the half line. In this case counting the lines
+        // separately would give incorrect results.
+        // Note that this does not reduce sequences recursively: [1, 0, 1, 0, 1] becomes [1, 0, 1]
+        // and not [1]. Sequences like this should not occur with the polygon's edges.
+        let mut lookahead = VecDeque::with_capacity(3);
+        let mut iterator_exhausted = false;
+        let filtered = iter.batching(move |it| {
+            // Get the next group of three if possible.
+            while lookahead.len() < 3 && !iterator_exhausted {
+                if let Some(value) = it.next() {
+                    lookahead.push_back(value);
+                } else {
+                    iterator_exhausted = true;
+                }
+            }
+
+            // If we do not have three elements, we are at the end and return everything.
+            if lookahead.len() < 3 {
+                return lookahead.pop_front();
+            }
+
+            let first = lookahead[0];
+            if lookahead[1] == 0 && lookahead[0] == lookahead[2] {
+                lookahead.clear();
+            } else {
+                lookahead.pop_front();
+            }
+
+            Some(first)
+        });
+
+        filtered
     }
 
     fn cut_path_insertion_and_direction(
