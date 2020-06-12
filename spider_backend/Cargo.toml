@@ -1,0 +1,15 @@
+[package]
+name = "spider_backend"
+version = "0.1.0"
+authors = ["Daniel Becker <daniel.93.becker@gmail.com>"]
+edition = "2018"
+
+[lib]
+name = "spider_backend"
+path = "src/lib.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+itertools = "0.9"
+rand = "0.7.3"

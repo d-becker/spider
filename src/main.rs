@@ -5,17 +5,17 @@ use gio::prelude::*;
 use glib::clone;
 use gtk::prelude::*;
 
-use spider_core;
-use spider_core::gui::{self, SpiderGui};
+use spider_backend;
+use spider_gtk::gui::{self, SpiderGui};
 
-use spider_core::model::point::{Direction, Point};
-use spider_core::model::field::Field;
-use spider_core::model::snake::Snake;
-use spider_core::model::spider::Spider;
-use spider_core::model::game::Game;
+use spider_backend::model::point::{Direction, Point};
+use spider_backend::model::field::Field;
+use spider_backend::model::snake::Snake;
+use spider_backend::model::spider::Spider;
+use spider_backend::model::game::Game;
 
-use spider_core::gui::draw::Drawable;
-use spider_core::gui::router::{Router, RouterCommand};
+use spider_gtk::gui::draw::Drawable;
+use spider_gtk::gui::router::{Router, RouterCommand};
 
 fn default_router() -> Router<gdk::enums::key::Key> {
     let mut router = Router::new();

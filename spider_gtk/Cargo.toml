@@ -1,16 +1,17 @@
 [package]
-name = "spider"
+name = "spider_gtk"
 version = "0.1.0"
 authors = ["Daniel Becker <daniel.93.becker@gmail.com>"]
 edition = "2018"
 
-[[bin]]
+[lib]
 name = "spider_gtk"
-path = "src/main.rs"
+path = "src/lib.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+spider_backend = { path = "../spider_backend" }
 itertools = "0.9"
 rand = "0.7.3"
 
@@ -23,8 +24,3 @@ gdk = "^0"
 gdk-pixbuf = "^0"
 gtk = "^0"
 cairo-rs = "^0"
-
-spider_backend = { path = "spider_backend" }
-spider_gtk = { path = "spider_gtk" }
-
-[workspace]

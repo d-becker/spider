@@ -504,6 +504,32 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c111b5bd5695e56cffe5129854aa230b39c93a305372fdbb2668ca2394eea9f8"
 
 [[package]]
+name = "spider"
+version = "0.1.0"
+dependencies = [
+ "cairo-rs",
+ "gdk",
+ "gdk-pixbuf",
+ "gio",
+ "glib",
+ "glib-sys",
+ "gobject-sys",
+ "gtk",
+ "itertools",
+ "rand",
+ "spider_backend",
+ "spider_gtk",
+]
+
+[[package]]
+name = "spider_backend"
+version = "0.1.0"
+dependencies = [
+ "itertools",
+ "rand",
+]
+
+[[package]]
 name = "spider_gtk"
 version = "0.1.0"
 dependencies = [
@@ -517,6 +543,7 @@ dependencies = [
  "gtk",
  "itertools",
  "rand",
+ "spider_backend",
 ]
 
 [[package]]

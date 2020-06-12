@@ -7,7 +7,7 @@ use gio::prelude::*;
 use gtk::prelude::*;
 use gtk::DrawingArea;
 
-use super::model;
+use spider_backend::model;
 
 pub type DrawCallback = Rc<dyn Fn(&DrawingArea, &cairo::Context) -> Inhibit>;
 pub type KeyEventCallback = Rc<dyn Fn(&gdk::EventKey) -> Inhibit>;
