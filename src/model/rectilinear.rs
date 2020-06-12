@@ -299,30 +299,21 @@ impl Polygon {
                 .filter(|line| line.intersects_half_line(point, Direction::RIGHT))
                 .map(|line| line.point_on_side(point));
 
+            // Reduce sequences of [1, 0, 1] to [1] and sequences of [-1, 0, -1] to [-1]. These
+            // occur when the half line intersects two lines in the same direction connected by a
+            // line that is perpendicular to the half line. In this case counting the lines
+            // separately would give incorrect results.
             let reduced = Self::reduce_sequences(intersecting_line_sides);
 
-            // TODO: Use iterators.
-            let values = reduced.collect::<Vec<_>>();
-            let sum: i32 = values.iter().sum();
-
             // Check wrapping. At most two elements of a sequence wrap around to the start, and at
-            // most two are at the end. Of course, it is either 1+2 or 2+1 (or none). We put the
-            // first two elements after the last two an check if there is a sequence. It shouldn't
-            // matter if we duplicate some elements (for example if there are three elements).
-            let end_idx = 2.min(values.len());
-            let first_two = &values[0..end_idx];
-
-            let start_idx = if values.len() > 2 {
-                values.len() - 1
-            } else {
-                0
-            };
-            let last_two = &values[start_idx..];
-
-            let together: Vec<i32> = last_two.iter().chain(first_two).copied().collect();
-
-            let to_subtract = match &together[..] {
-                &[v, 0, w, ..] | &[.., v, 0, w] if v == w => v,
+            // most two are at the end. Of course, it is either 1+2 or 2+1 (or none). If there are
+            // less than two elements, we fill the places with zeroes. We put the first two
+            // elements after the last two an check if there is a sequence. It shouldn't matter if
+            // we duplicate some elements (for example if there are three elements) or use zeroes
+            // in their places.
+            let (sum, (first, second), (second_last, last)) = Self::sum_and_first_last_two(reduced);
+            let to_subtract = match (second_last, last, first, second) {
+                (v, 0, w, _) | (_, v, 0, w) if v == w => v,
                 _ => 0,
             };
 
@@ -334,6 +325,37 @@ impl Polygon {
         } else {
             false
         }
+    }
+
+    // Return the sum of the iterator as well as the first two and last two elements. If there is
+    // zero or one element, zeros are used in their place, which shouldn't matter for the caller's
+    // specific use case.
+    fn sum_and_first_last_two<I: Iterator<Item = i32>>(iter: I) -> (i32, (i32, i32), (i32, i32)) {
+        let mut iter = iter.fuse();
+
+        let first = {
+            if let Some(elem) = iter.next() {
+                elem
+            } else {
+                return (0, (0, 0), (0, 0));
+            }
+        };
+
+        let second = {
+            if let Some(elem) = iter.next() {
+                elem
+            } else {
+                return (first, (first, 0), (0, 0));
+            }
+        };
+
+        let accumulator_init = (first + second, (first, second));
+        let (sum, (second_last, last)) = iter.fold(accumulator_init, |acc, elem| {
+            let (sum, (_second_last, last)) = acc;
+            (sum + elem, (last, elem))
+        });
+
+        (sum, (first, second), (second_last, last))
     }
 
     pub fn intersections_with_line<'a, 'b, 'c, PointT, LineT>(
